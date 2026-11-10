@@ -36,13 +36,20 @@ The repository's `APP_PACKAGE` is `org.telegram.messenger`; the Debug build adds
    ```
 2. Open the project in Android Studio and install the Android SDK 36 and NDK 27.2.12479018 requested by the Gradle files. Let Android Studio create/update `local.properties` for your SDK path.
 3. Configure your own Telegram API ID and API hash locally in the project's BuildVars configuration. Do not publish or send these credentials.
-4. Build the Debug variant:
+4. Build the **afatDebug** variant (the plain `assembleDebug` task is filtered out by this repository's Gradle configuration):
    ```bash
-   ./gradlew assembleDebug
+   ./gradlew :TMessagesProj_App:assembleAfatDebug
    ```
-   On Windows use `gradlew.bat assembleDebug`.
-5. The application APK is produced under the app module's `build/outputs/apk/debug/` directory. The exact output folder/name can vary with the Gradle variant and project configuration.
+   On Windows use:
+   ```bat
+   gradlew.bat :TMessagesProj_App:assembleAfatDebug
+   ```
+5. The APK should be generated at:
+   ```
+   TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+   ```
+   This Debug build uses the application ID `org.telegram.messenger.beta`, so it can be installed alongside the official package `org.telegram.messenger`.
 
 ## Verification status
 
-The source changes are committed to this branch, but this environment has not compiled or run the Android application. Test the Debug build on Android 12 before relying on the feature. In particular, test first-time password creation, wrong-password rejection, hide/unhide, search, notification suppression, app-background locking, and reinstall/backup behavior.
+The source changes are committed to this branch, but this environment has not compiled or run the Android application. The Gradle task and APK path above were checked against this repository's build configuration. Test the resulting APK on Android 12 before relying on the feature. In particular, test first-time password creation, wrong-password rejection, hide/unhide, search, notification suppression, app-background locking, and reinstall/backup behavior.
