@@ -1088,7 +1088,7 @@ public class NotificationsController extends BaseController implements Notificat
         }
 
         if (messageObjects != null) {
-            HiddenChatsVault hiddenChatsVault = new HiddenChatsVault(ApplicationLoader.applicationContext);
+            HiddenChatsVault hiddenChatsVault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
             for (int i = 0; i < messageObjects.size(); ++i) {
                 final MessageObject messageObject = messageObjects.get(i);
                 if (messageObject != null && hiddenChatsVault.isDialogHiddenForFiltering(messageObject.getDialogId())) {
@@ -1137,7 +1137,7 @@ public class NotificationsController extends BaseController implements Notificat
             boolean allowPinned = preferences.getBoolean("PinnedMessages", true);
             int popup = 0;
             boolean hasScheduled = false;
-            HiddenChatsVault hiddenChatsVault = new HiddenChatsVault(ApplicationLoader.applicationContext);
+            HiddenChatsVault hiddenChatsVault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
 
             for (int a = 0; a < messageObjects.size(); a++) {
                 MessageObject messageObject = messageObjects.get(a);
