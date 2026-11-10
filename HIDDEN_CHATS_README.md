@@ -11,7 +11,7 @@ This branch adds a device-local hidden-chat area to the Android client.
 5. Select one or more chats. Their messages remain in Telegram's normal local database and are not deleted.
 6. Tap a hidden chat's name to open it, or choose **Unhide** to return it to the normal list.
 
-The hidden area locks when it is closed or when the app leaves the foreground. The hidden area sets Android's secure-window flag while it is present, preventing screenshots and recent-app previews.
+The vault locks when its fragment is closed or when the app leaves the foreground. Once the hidden area is opened, Android's secure-window flag remains enabled for the rest of that app session so that opening a hidden chat does not expose it in screenshots or recent-app previews. This also disables screenshots of ordinary screens until the app process is restarted.
 
 ## Local protection
 
