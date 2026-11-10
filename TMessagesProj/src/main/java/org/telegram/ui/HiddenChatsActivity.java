@@ -8,6 +8,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.text.InputType;
+import android.text.method.DigitsKeyListener;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -54,7 +55,7 @@ public class HiddenChatsActivity extends BaseFragment {
             getParentActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         }
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setTitle("Hidden chats");
+        actionBar.setTitle("گفتگوهای مخفی");
 
         ScrollView scroll = new ScrollView(context);
         content = new LinearLayout(context);
@@ -63,17 +64,17 @@ public class HiddenChatsActivity extends BaseFragment {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         TextView description = new TextView(context);
-        description.setText("Chats in this area are hidden locally. Their messages are not deleted.");
+        description.setText("گفتگوهای این بخش فقط در همین دستگاه مخفی می‌شوند و هیچ پیامی حذف نخواهد شد.");
         description.setTextSize(14);
         content.addView(description, new LinearLayout.LayoutParams(-1, -2));
 
         Button unlock = new Button(context);
-        unlock.setText(vault.isConfigured() ? "Unlock hidden chats" : "Set hidden-chats password");
+        unlock.setText(vault.isConfigured() ? "باز کردن گفتگوهای مخفی" : "تنظیم رمز عبور");
         unlock.setOnClickListener(v -> requestPassword());
         content.addView(unlock, new LinearLayout.LayoutParams(-1, -2));
 
         Button lock = new Button(context);
-        lock.setText("Lock now");
+        lock.setText("قفل کردن");
         lock.setOnClickListener(v -> {
             vault.lock();
             refreshRows();
@@ -81,7 +82,7 @@ public class HiddenChatsActivity extends BaseFragment {
         content.addView(lock, new LinearLayout.LayoutParams(-1, -2));
 
         Button add = new Button(context);
-        add.setText("Hide existing chats");
+        add.setText("مخفی کردن گفتگوها");
         add.setOnClickListener(v -> openChatPicker());
         content.addView(add, new LinearLayout.LayoutParams(-1, -2));
 
@@ -101,13 +102,14 @@ public class HiddenChatsActivity extends BaseFragment {
         if (getParentActivity() == null) return;
         final EditText password = new EditText(getParentActivity());
         password.setSingleLine(true);
+        password.setKeyListener(DigitsKeyListener.getInstance("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"));
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        password.setHint("At least 8 characters, letters and numbers");
+        password.setHint("حداقل ۸ نویسه؛ حروف و اعداد انگلیسی");
         AlertDialog dialog = new AlertDialog.Builder(getParentActivity())
-                .setTitle(vault.isConfigured() ? "Unlock hidden chats" : "Create password")
+                .setTitle(vault.isConfigured() ? "باز کردن گفتگوهای مخفی" : "ایجاد رمز عبور")
                 .setView(password)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton(vault.isConfigured() ? "Unlock" : "Continue", null)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton(vault.isConfigured() ? "باز کردن" : "ادامه", null)
                 .create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             char[] entered = password.getText().toString().toCharArray();
@@ -133,23 +135,24 @@ public class HiddenChatsActivity extends BaseFragment {
     private void requestPasswordConfirmation(char[] first) {
         final EditText confirmation = new EditText(getParentActivity());
         confirmation.setSingleLine(true);
+        confirmation.setKeyListener(DigitsKeyListener.getInstance("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"));
         confirmation.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         new AlertDialog.Builder(getParentActivity())
-                .setTitle("Confirm password")
-                .setMessage("Enter the same password again.")
+                .setTitle("تأیید رمز عبور")
+                .setMessage("همان رمز عبور را دوباره وارد کنید.")
                 .setView(confirmation)
-                .setNegativeButton("Cancel", (d, w) -> Arrays.fill(first, '\0'))
-                .setPositiveButton("Create", (d, w) -> {
+                .setNegativeButton("انصراف", (d, w) -> Arrays.fill(first, '\0'))
+                .setPositiveButton("ایجاد", (d, w) -> {
                     char[] second = confirmation.getText().toString().toCharArray();
                     try {
                         if (!Arrays.equals(first, second)) {
-                            Toast.makeText(getParentActivity(), "Passwords do not match", Toast.LENGTH_LONG).show();
+                            Toast.makeText(getParentActivity(), "رمزهای عبور یکسان نیستند", Toast.LENGTH_LONG).show();
                             return;
                         }
                         vault.create(first);
                         refreshRows();
                     } catch (Exception e) {
-                        Toast.makeText(getParentActivity(), e.getMessage() == null ? "Could not create vault" : e.getMessage(), Toast.LENGTH_LONG).show();
+                        Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
                     } finally {
                         Arrays.fill(first, '\0');
                         Arrays.fill(second, '\0');
@@ -163,7 +166,7 @@ public class HiddenChatsActivity extends BaseFragment {
         rows.removeAllViews();
         if (!vault.isUnlocked()) {
             TextView locked = new TextView(getParentActivity());
-            locked.setText("The hidden-chat list is locked.");
+            locked.setText("فهرست گفتگوهای مخفی قفل است.");
             locked.setTextSize(15);
             locked.setPadding(0, dp(getParentActivity(), 20), 0, dp(getParentActivity(), 12));
             rows.addView(locked);
@@ -177,7 +180,7 @@ public class HiddenChatsActivity extends BaseFragment {
         }
         if (ids.isEmpty()) {
             TextView empty = new TextView(getParentActivity());
-            empty.setText("No hidden chats yet.");
+            empty.setText("هنوز گفتگویی مخفی نشده است.");
             empty.setPadding(0, dp(getParentActivity(), 20), 0, dp(getParentActivity(), 12));
             rows.addView(empty);
             return;
@@ -194,14 +197,14 @@ public class HiddenChatsActivity extends BaseFragment {
             line.addView(title, new LinearLayout.LayoutParams(0, dp(getParentActivity(), 56), 1));
             title.setOnClickListener(v -> openHiddenChat(dialogId));
             Button restore = new Button(getParentActivity());
-            restore.setText("Unhide");
+            restore.setText("نمایش دوباره");
             restore.setOnClickListener(v -> {
                 try {
                     vault.unhideDialog(dialogId);
                     org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
                 } catch (GeneralSecurityException e) {
-                    Toast.makeText(getParentActivity(), "Could not restore chat", Toast.LENGTH_LONG).show();
+                    Toast.makeText(getParentActivity(), "نمایش دوباره گفتگو انجام نشد", Toast.LENGTH_LONG).show();
                 }
             });
             line.addView(restore, new LinearLayout.LayoutParams(-2, -2));
@@ -220,7 +223,7 @@ public class HiddenChatsActivity extends BaseFragment {
 
     private void openChatPicker() {
         if (!vault.isUnlocked()) {
-            Toast.makeText(getParentActivity(), "Unlock the hidden-chat area first", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getParentActivity(), "ابتدا بخش گفتگوهای مخفی را باز کنید", Toast.LENGTH_SHORT).show();
             return;
         }
         android.os.Bundle args = new android.os.Bundle();
@@ -239,7 +242,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 fragment.finishFragment();
                 refreshRows();
             } catch (GeneralSecurityException e) {
-                Toast.makeText(getParentActivity(), "Could not hide selected chat", Toast.LENGTH_LONG).show();
+                Toast.makeText(getParentActivity(), "مخفی‌کردن گفتگوی انتخاب‌شده انجام نشد", Toast.LENGTH_LONG).show();
             }
             return true;
         });
