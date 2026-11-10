@@ -53,6 +53,7 @@ import android.graphics.drawable.ShapeDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
@@ -286,6 +287,8 @@ import me.vkryl.android.util.ClickHelper;
 import me.vkryl.core.BitwiseUtils;
 
 public class DialogsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, FloatingDebugProvider, FactorAnimator.Target, MainTabsActivity.TabFragmentDelegate {
+    private int hiddenTitleTapCount;
+    private long hiddenTitleLastTap;
     private final int ADDITIONAL_LIST_HEIGHT_DP = Build.VERSION.SDK_INT >= 31 ? 48 : 0;
 
     private static final boolean TMP_DISABLE_TOPICS_TWO_COLUMNS = false;
@@ -3454,6 +3457,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.setClipContent(true);
         //}
         actionBar.setTitleActionRunnable(() -> {
+            if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0 && communityId == 0) {
+                long now = SystemClock.uptimeMillis();
+                if (now - hiddenTitleLastTap > 1500) {
+                    hiddenTitleTapCount = 0;
+                }
+                hiddenTitleLastTap = now;
+                hiddenTitleTapCount++;
+                if (hiddenTitleTapCount >= 5) {
+                    hiddenTitleTapCount = 0;
+                    presentFragment(new HiddenChatsActivity(currentAccount));
+                    return;
+                }
+            }
             if (initialDialogsType != DIALOGS_TYPE_WIDGET) {
                 hideFloatingButton(false);
             }
