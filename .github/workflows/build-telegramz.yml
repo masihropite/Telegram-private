@@ -56,7 +56,7 @@ jobs:
 
           path = Path("TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java")
           source = path.read_text(encoding="utf-8")
-          source, id_count = re.subn(r"public static int APP_ID = \\d+;", f"public static int APP_ID = {api_id};", source, count=1)
+          source, id_count = re.subn(r"public static int APP_ID = \d+;", f"public static int APP_ID = {api_id};", source, count=1)
           source, hash_count = re.subn(r'public static String APP_HASH = "[^"]*";', f'public static String APP_HASH = "{api_hash}";', source, count=1)
           if id_count != 1 or hash_count != 1:
               raise SystemExit("Could not safely locate the Telegram API settings in BuildVars.java.")
