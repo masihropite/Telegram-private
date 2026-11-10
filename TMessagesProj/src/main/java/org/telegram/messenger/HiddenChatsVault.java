@@ -20,6 +20,12 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.security.KeyStore;
+import javax.crypto.KeyGenerator;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -43,6 +49,8 @@ public final class HiddenChatsVault {
 
     private static final String PREFS_NAME = "hidden_chats_vault_v1";
     private static final String KEY_PAYLOAD = "encrypted_payload";
+    private static final String KEY_FILTER_TOKENS = "hidden_dialog_filter_tokens";
+    private static final String KEYSTORE_ALIAS = "telegram_hidden_chats_filter_hmac_v1";
     private static final int FORMAT_VERSION = 1;
     private static final int SALT_BYTES = 16;
     private static final int IV_BYTES = 12;
@@ -163,6 +171,21 @@ public final class HiddenChatsVault {
         return hiddenDialogIds.contains(dialogId);
     }
 
+    /**
+     * Checks hidden state without unlocking. Only one-way HMAC tokens are
+     * persisted, allowing the main chat list to remain filtered while locked.
+     */
+    public synchronized boolean isDialogHiddenForFiltering(long dialogId) {
+        try {
+            String token = dialogToken(dialogId);
+            Set<String> tokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+            return tokens != null && tokens.contains(token);
+        } catch (Exception e) {
+            // Fail closed: a keystore failure must not reveal hidden chats.
+            return true;
+        }
+    }
+
     public synchronized void hideDialog(long dialogId) throws GeneralSecurityException {
         requireUnlocked();
         if (dialogId == 0) {
@@ -194,11 +217,42 @@ public final class HiddenChatsVault {
         payload.put(iv);
         payload.put(ciphertext);
 
+        Set<String> filterTokens = new LinkedHashSet<String>();
+        for (Long id : hiddenDialogIds) {
+            filterTokens.add(dialogToken(id.longValue()));
+        }
         boolean saved = preferences.edit()
                 .putString(KEY_PAYLOAD, Base64.encodeToString(payload.array(), Base64.NO_WRAP))
+                .putStringSet(KEY_FILTER_TOKENS, filterTokens)
                 .commit();
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
+        }
+    }
+
+    private String dialogToken(long dialogId) throws GeneralSecurityException {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            SecretKey key;
+            if (keyStore.containsAlias(KEYSTORE_ALIAS)) {
+                key = (SecretKey) keyStore.getKey(KEYSTORE_ALIAS, null);
+            } else {
+                KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore");
+                generator.init(new KeyGenParameterSpec.Builder(KEYSTORE_ALIAS,
+                        KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                        .setDigests(KeyProperties.DIGEST_SHA256)
+                        .build());
+                key = generator.generateKey();
+            }
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(key);
+            byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
+            return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
+        } catch (GeneralSecurityException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GeneralSecurityException("Could not access Android Keystore", e);
         }
     }
 
