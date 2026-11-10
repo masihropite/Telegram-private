@@ -1131,9 +1131,15 @@ public class NotificationsController extends BaseController implements Notificat
             boolean allowPinned = preferences.getBoolean("PinnedMessages", true);
             int popup = 0;
             boolean hasScheduled = false;
+            HiddenChatsVault hiddenChatsVault = new HiddenChatsVault(ApplicationLoader.applicationContext);
 
             for (int a = 0; a < messageObjects.size(); a++) {
                 MessageObject messageObject = messageObjects.get(a);
+                if (messageObject != null && messageObject.messageOwner != null
+                        && hiddenChatsVault.isDialogHiddenForFiltering(messageObject.getDialogId())) {
+                    // Do not surface message previews, counts, or popup alerts for hidden chats.
+                    continue;
+                }
                 if (messageObject.messageOwner != null && (messageObject.isImportedForward() ||
                         messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL ||
                         messageObject.messageOwner.silent && (messageObject.messageOwner.action instanceof TLRPC.TL_messageActionContactSignUp || messageObject.messageOwner.action instanceof TLRPC.TL_messageActionUserJoined)) ||
