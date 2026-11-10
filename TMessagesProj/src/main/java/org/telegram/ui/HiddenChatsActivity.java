@@ -112,7 +112,7 @@ public class HiddenChatsActivity extends BaseFragment {
                     dialog.dismiss();
                     refreshRows();
                 } else {
-                    requestPasswordConfirmation(entered);
+                    requestPasswordConfirmation(entered.clone());
                     dialog.dismiss();
                 }
             } catch (Exception e) {
