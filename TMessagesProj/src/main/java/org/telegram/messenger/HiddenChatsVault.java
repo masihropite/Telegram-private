@@ -60,6 +60,7 @@ public final class HiddenChatsVault {
     private static final int MAX_DIALOGS = 100000;
 
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static volatile SecretKey cachedFilterKey;
 
     private final SharedPreferences preferences;
     private final Set<Long> hiddenDialogIds = new LinkedHashSet<Long>();
@@ -232,18 +233,26 @@ public final class HiddenChatsVault {
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
         try {
-            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-            keyStore.load(null);
-            SecretKey key;
-            if (keyStore.containsAlias(KEYSTORE_ALIAS)) {
-                key = (SecretKey) keyStore.getKey(KEYSTORE_ALIAS, null);
-            } else {
-                KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore");
-                generator.init(new KeyGenParameterSpec.Builder(KEYSTORE_ALIAS,
-                        KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                        .setDigests(KeyProperties.DIGEST_SHA256)
-                        .build());
-                key = generator.generateKey();
+            SecretKey key = cachedFilterKey;
+            if (key == null) {
+                synchronized (HiddenChatsVault.class) {
+                    key = cachedFilterKey;
+                    if (key == null) {
+                        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+                        keyStore.load(null);
+                        if (keyStore.containsAlias(KEYSTORE_ALIAS)) {
+                            key = (SecretKey) keyStore.getKey(KEYSTORE_ALIAS, null);
+                        } else {
+                            KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore");
+                            generator.init(new KeyGenParameterSpec.Builder(KEYSTORE_ALIAS,
+                                    KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+                                    .setDigests(KeyProperties.DIGEST_SHA256)
+                                    .build());
+                            key = generator.generateKey();
+                        }
+                        cachedFilterKey = key;
+                    }
+                }
             }
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(key);
