@@ -10,6 +10,7 @@ import android.graphics.Typeface;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -43,11 +44,15 @@ public class HiddenChatsActivity extends BaseFragment {
     @Override
     public boolean onFragmentCreate() {
         vault = new HiddenChatsVault(ApplicationLoader.applicationContext);
+        vault.registerAsActiveVault();
         return super.onFragmentCreate();
     }
 
     @Override
     protected View createView(Context context) {
+        if (getParentActivity() != null) {
+            getParentActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setTitle("Hidden chats");
 
@@ -187,6 +192,7 @@ public class HiddenChatsActivity extends BaseFragment {
             title.setTextSize(16);
             title.setTypeface(null, Typeface.BOLD);
             line.addView(title, new LinearLayout.LayoutParams(0, dp(getParentActivity(), 56), 1));
+            title.setOnClickListener(v -> openHiddenChat(dialogId));
             Button restore = new Button(getParentActivity());
             restore.setText("Unhide");
             restore.setOnClickListener(v -> {
@@ -235,9 +241,28 @@ public class HiddenChatsActivity extends BaseFragment {
         presentFragment(picker);
     }
 
+    private void openHiddenChat(long dialogId) {
+        android.os.Bundle args = new android.os.Bundle();
+        if (dialogId > 0) {
+            args.putLong("user_id", dialogId);
+        } else {
+            args.putLong("chat_id", -dialogId);
+        }
+        presentFragment(new ChatActivity(args));
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        refreshRows();
+    }
+
     @Override
     public void onFragmentDestroy() {
         if (vault != null) vault.lock();
+        if (getParentActivity() != null) {
+            getParentActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
         super.onFragmentDestroy();
     }
 }
