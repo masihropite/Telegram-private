@@ -1458,7 +1458,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     public Object getItem(int i) {
         if (!publicPosts.isEmpty()) {
             if (i > 0 && i - 1 < publicPosts.size()) {
-                return publicPosts.get(i - 1);
+                return filterHiddenChatSearchResult(publicPosts.get(i - 1));
             }
             i -= (publicPosts.size() + 1);
         }
