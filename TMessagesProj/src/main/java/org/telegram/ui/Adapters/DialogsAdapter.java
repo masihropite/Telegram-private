@@ -38,6 +38,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
@@ -1665,6 +1666,19 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             }
         }
 
+        // Hidden chats are removed from the ordinary main list even while
+        // the vault is locked. Selection screens and other folders are untouched.
+        if (dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && folderId == 0 && !isOnlySelect && array != null) {
+            HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext);
+            ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
+            for (int i = 0; i < array.size(); i++) {
+                TLRPC.Dialog dialog = array.get(i);
+                if (dialog == null || !hiddenVault.isDialogHiddenForFiltering(dialog.id)) {
+                    visibleDialogs.add(dialog);
+                }
+            }
+            array = visibleDialogs;
+        }
         dialogsCount = array.size();
         isEmpty = false;
         if (dialogsCount == 0 && parentFragment.isArchive()) {
