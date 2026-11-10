@@ -53,3 +53,8 @@ The repository's `APP_PACKAGE` is `org.telegram.messenger`; the Debug build adds
 ## Verification status
 
 The source changes are committed to this branch, but this environment has not compiled or run the Android application. The Gradle task and APK path above were checked against this repository's build configuration. Test the resulting APK on Android 12 before relying on the feature. In particular, test first-time password creation, wrong-password rejection, hide/unhide, search, notification suppression, app-background locking, and reinstall/backup behavior.
+
+
+## TelegramZ automated APK build
+
+The GitHub Actions workflow `.github/workflows/build-telegramz.yml` builds the `:TMessagesProj_App:assembleAfatDebug` variant on pushes to `feature/local-hidden-chats` and uploads the resulting `TelegramZ.apk` as a workflow artifact.
