@@ -1431,7 +1431,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
 
     private Object filterHiddenChatSearchResult(Object object) {
         long dialogId = 0;
-        if (object instanceof TLRPC.User) {
+        if (object instanceof TLRPC.TL_sponsoredPeer) {
+            dialogId = DialogObject.getPeerDialogId(((TLRPC.TL_sponsoredPeer) object).peer);
+        } else if (object instanceof TLRPC.User) {
             dialogId = ((TLRPC.User) object).id;
         } else if (object instanceof TLRPC.Chat) {
             dialogId = -((TLRPC.Chat) object).id;
