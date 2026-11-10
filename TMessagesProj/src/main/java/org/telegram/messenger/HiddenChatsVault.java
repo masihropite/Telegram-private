@@ -70,11 +70,15 @@ public final class HiddenChatsVault {
     private byte[] unlockedKey;
 
     public HiddenChatsVault(Context context) {
+        this(context, 0);
+    }
+
+    public HiddenChatsVault(Context context, int account) {
         if (context == null) {
             throw new IllegalArgumentException("Context must not be null");
         }
         preferences = context.getApplicationContext().getSharedPreferences(
-                PREFS_NAME, Context.MODE_PRIVATE);
+                PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
     }
 
     public void registerAsActiveVault() {
