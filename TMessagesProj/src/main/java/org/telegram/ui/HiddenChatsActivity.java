@@ -230,7 +230,10 @@ public class HiddenChatsActivity extends BaseFragment {
         picker.setDelegate((fragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
             try {
                 for (MessagesStorage.TopicKey key : dids) {
-                    if (key.topicId == 0) vault.hideDialog(key.dialogId);
+                    if (key.topicId == 0) {
+                        vault.hideDialog(key.dialogId);
+                        org.telegram.messenger.NotificationsController.getInstance(currentAccount).removeNotificationsForDialog(key.dialogId);
+                    }
                 }
                 org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                 fragment.finishFragment();
