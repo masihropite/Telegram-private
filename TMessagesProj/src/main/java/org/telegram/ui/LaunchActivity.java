@@ -127,6 +127,7 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.NotificationsController;
@@ -6952,6 +6953,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onStop() {
+        HiddenChatsVault.lockActiveVault();
         super.onStop();
         GramWalletStorageAuth.onActivityStopped(this);
         isStarted = false;
