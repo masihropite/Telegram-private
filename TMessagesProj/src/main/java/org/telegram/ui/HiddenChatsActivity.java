@@ -198,6 +198,7 @@ public class HiddenChatsActivity extends BaseFragment {
             restore.setOnClickListener(v -> {
                 try {
                     vault.unhideDialog(dialogId);
+                    org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
                 } catch (GeneralSecurityException e) {
                     Toast.makeText(getParentActivity(), "Could not restore chat", Toast.LENGTH_LONG).show();
@@ -231,6 +232,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 for (MessagesStorage.TopicKey key : dids) {
                     if (key.topicId == 0) vault.hideDialog(key.dialogId);
                 }
+                org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                 fragment.finishFragment();
                 refreshRows();
             } catch (GeneralSecurityException e) {
