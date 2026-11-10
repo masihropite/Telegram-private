@@ -1449,7 +1449,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) recent).id);
             }
         }
-        if (dialogId != 0 && new HiddenChatsVault(mContext).isDialogHiddenForFiltering(dialogId)) {
+        if (dialogId != 0 && new HiddenChatsVault(mContext, currentAccount).isDialogHiddenForFiltering(dialogId)) {
             return null;
         }
         return object;
