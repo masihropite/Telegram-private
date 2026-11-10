@@ -61,6 +61,7 @@ public final class HiddenChatsVault {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
+    private static volatile HiddenChatsVault activeVault;
 
     private final SharedPreferences preferences;
     private final Set<Long> hiddenDialogIds = new LinkedHashSet<Long>();
@@ -74,6 +75,17 @@ public final class HiddenChatsVault {
         }
         preferences = context.getApplicationContext().getSharedPreferences(
                 PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    public void registerAsActiveVault() {
+        activeVault = this;
+    }
+
+    public static void lockActiveVault() {
+        HiddenChatsVault current = activeVault;
+        if (current != null) {
+            current.lock();
+        }
     }
 
     public synchronized boolean isConfigured() {
