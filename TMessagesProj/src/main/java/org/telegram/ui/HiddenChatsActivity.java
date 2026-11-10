@@ -268,9 +268,9 @@ public class HiddenChatsActivity extends BaseFragment {
     @Override
     public void onFragmentDestroy() {
         if (vault != null) vault.lock();
-        if (getParentActivity() != null) {
-            getParentActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        }
+        // Keep FLAG_SECURE on the host window for the rest of this app
+        // session. A hidden chat may be the fragment opened immediately after
+        // this one; clearing the flag here could expose that chat in Recents.
         super.onFragmentDestroy();
     }
 }
