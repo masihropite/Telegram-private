@@ -1435,6 +1435,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             dialogId = ((TLRPC.User) object).id;
         } else if (object instanceof TLRPC.Chat) {
             dialogId = -((TLRPC.Chat) object).id;
+        } else if (object instanceof TLRPC.EncryptedChat) {
+            dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) object).id);
         } else if (object instanceof MessageObject) {
             dialogId = ((MessageObject) object).getDialogId();
         } else if (object instanceof RecentSearchObject) {
@@ -1443,6 +1445,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 dialogId = ((TLRPC.User) recent).id;
             } else if (recent instanceof TLRPC.Chat) {
                 dialogId = -((TLRPC.Chat) recent).id;
+            } else if (recent instanceof TLRPC.EncryptedChat) {
+                dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) recent).id);
             }
         }
         if (dialogId != 0 && new HiddenChatsVault(mContext).isDialogHiddenForFiltering(dialogId)) {
