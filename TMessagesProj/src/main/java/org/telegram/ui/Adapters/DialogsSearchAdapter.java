@@ -37,6 +37,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -1428,6 +1429,28 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         return currentItemCount = count;
     }
 
+    private Object filterHiddenChatSearchResult(Object object) {
+        long dialogId = 0;
+        if (object instanceof TLRPC.User) {
+            dialogId = ((TLRPC.User) object).id;
+        } else if (object instanceof TLRPC.Chat) {
+            dialogId = -((TLRPC.Chat) object).id;
+        } else if (object instanceof MessageObject) {
+            dialogId = ((MessageObject) object).getDialogId();
+        } else if (object instanceof RecentSearchObject) {
+            Object recent = ((RecentSearchObject) object).object;
+            if (recent instanceof TLRPC.User) {
+                dialogId = ((TLRPC.User) recent).id;
+            } else if (recent instanceof TLRPC.Chat) {
+                dialogId = -((TLRPC.Chat) recent).id;
+            }
+        }
+        if (dialogId != 0 && new HiddenChatsVault(mContext).isDialogHiddenForFiltering(dialogId)) {
+            return null;
+        }
+        return object;
+    }
+
     public Object getItem(int i) {
         if (!publicPosts.isEmpty()) {
             if (i > 0 && i - 1 < publicPosts.size()) {
@@ -1458,7 +1481,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                         object = chat;
                     }
                 }
-                return object;
+                return filterHiddenChatSearchResult(object);
             } else {
                 i -= getRecentItemsCount();
             }
@@ -1496,15 +1519,15 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         }
         int globalCount = globalSearch.isEmpty() && sponsoredPeers.isEmpty() ? 0 : globalSearchCount + sponsoredPeers.size() + 1;
         if (i >= 0 && i < localCount) {
-            return searchResult.get(i);
+            return filterHiddenChatSearchResult(searchResult.get(i));
         }
         i -= localCount;
         if (i >= 0 && i < localServerCount) {
-            return localServerSearch.get(i);
+            return filterHiddenChatSearchResult(localServerSearch.get(i));
         }
         i -= localServerCount;
         if (i >= 0 && i < phoneCount) {
-            return phoneSearch.get(i);
+            return filterHiddenChatSearchResult(phoneSearch.get(i));
         }
         i -= phoneCount;
         if (i > 0 && i < globalCount) {
@@ -1514,19 +1537,19 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             }
             i -= sponsoredPeers.size();
             if (i >= 0 && i < globalSearch.size()) {
-                return globalSearch.get(i);
+                return filterHiddenChatSearchResult(globalSearch.get(i));
             }
         } else {
             i -= globalCount;
         }
         int localMessagesCount = searchForumResultMessages.isEmpty() ? 0 : searchForumResultMessages.size() + 1;
         if (i > 0 && i <= searchForumResultMessages.size()) {
-            return searchForumResultMessages.get(i - 1);
+            return filterHiddenChatSearchResult(searchForumResultMessages.get(i - 1));
         }
         i -= localMessagesCount + (!localMessagesSearchEndReached && !searchForumResultMessages.isEmpty() ? 1 : 0);
         int messagesCount = searchResultMessages.isEmpty() ? 0 : searchResultMessages.size() + 1;
         if (i > 0 && i <= searchResultMessages.size()) {
-            return searchResultMessages.get(i - 1);
+            return filterHiddenChatSearchResult(searchResultMessages.get(i - 1));
         }
         // i -= messagesCount;
         return null;
