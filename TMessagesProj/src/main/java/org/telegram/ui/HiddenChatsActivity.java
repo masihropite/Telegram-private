@@ -43,7 +43,7 @@ public class HiddenChatsActivity extends BaseFragment {
 
     @Override
     public boolean onFragmentCreate() {
-        vault = new HiddenChatsVault(ApplicationLoader.applicationContext);
+        vault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
         vault.registerAsActiveVault();
         return super.onFragmentCreate();
     }
