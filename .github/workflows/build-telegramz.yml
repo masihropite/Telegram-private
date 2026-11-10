@@ -1,0 +1,59 @@
+name: Build TelegramZ APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/local-hidden-chats
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build TelegramZ
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :TMessagesProj_App:assembleAfatDebug
+
+      - name: Prepare APK
+        run: |
+          test -f TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+          cp TMessagesProj_App/build/outputs/apk/afat/debug/app.apk TelegramZ.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramZ-apk
+          path: TelegramZ.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: telegramz-build-${{ github.run_number }}
+          name: TelegramZ build ${{ github.run_number }}
+          files: TelegramZ.apk
