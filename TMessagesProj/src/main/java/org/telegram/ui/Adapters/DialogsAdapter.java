@@ -1669,7 +1669,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         // Hidden chats are removed from the ordinary main list even while
         // the vault is locked. Selection screens and other folders are untouched.
         if (dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && folderId == 0 && !isOnlySelect && array != null) {
-            HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext);
+            HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
