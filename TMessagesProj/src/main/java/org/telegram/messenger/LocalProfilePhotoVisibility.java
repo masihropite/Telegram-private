@@ -47,6 +47,7 @@ public final class LocalProfilePhotoVisibility {
             return false;
         }
         prefs.edit().putBoolean(key, hidden).apply();
+        NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
         NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.mainUserInfoChanged);
         NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogsNeedReload);
         return true;
