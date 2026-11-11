@@ -12,12 +12,33 @@ import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ApplicationLoader;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
 public class SQLiteDatabase {
 
 	private final long sqliteHandle;
 
 	private boolean isOpen;
     private boolean inTransaction;
+    private final Set<SQLitePreparedStatement> activeStatements =
+            Collections.newSetFromMap(new IdentityHashMap<SQLitePreparedStatement, Boolean>());
+
+    synchronized void registerStatement(SQLitePreparedStatement statement) {
+        if (isOpen) {
+            activeStatements.add(statement);
+        }
+    }
+
+    synchronized void unregisterStatement(SQLitePreparedStatement statement) {
+        activeStatements.remove(statement);
+    }
+
+    private synchronized ArrayList<SQLitePreparedStatement> getActiveStatementsSnapshot() {
+        return new ArrayList<SQLitePreparedStatement>(activeStatements);
+    }
 
 	public long getSQLiteHandle() {
 		return sqliteHandle;
@@ -72,6 +93,13 @@ public class SQLiteDatabase {
 
 	public void close() {
 		if (isOpen) {
+            // A leaked cursor keeps its native prepared statement alive and
+            // SQLite refuses to close the connection while statements remain.
+            // Storage cleanup runs on the storage queue, so finalize all
+            // outstanding statements before closing the native database.
+            for (SQLitePreparedStatement statement : getActiveStatementsSnapshot()) {
+                statement.finalizeQuery();
+            }
 			try {
                 commitTransaction();
 				closedb(sqliteHandle);
