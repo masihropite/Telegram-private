@@ -41,9 +41,8 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Device-local encrypted vault for dialog IDs selected by the user.
  *
- * Password policy: at least 8 ASCII characters, including at least one letter
- * and one digit. Passwords are never persisted. The derived AES key exists
- * only in memory while the vault is unlocked.
+ * Password policy: exactly six ASCII digits. Passwords are never persisted.
+ * The derived AES key exists only in memory while the vault is unlocked.
  */
 public final class HiddenChatsVault {
 
@@ -83,6 +82,10 @@ public final class HiddenChatsVault {
 
     public void registerAsActiveVault() {
         activeVault = this;
+    }
+
+    public static HiddenChatsVault getActiveVault() {
+        return activeVault;
     }
 
     public static void lockActiveVault() {
@@ -343,20 +346,13 @@ public final class HiddenChatsVault {
     }
 
     private static void validatePassword(char[] password) {
-        if (password == null || password.length < 8) {
-            throw new IllegalArgumentException("Password must contain at least 8 characters");
+        if (password == null || password.length != 6) {
+            throw new IllegalArgumentException("Password must contain exactly 6 digits");
         }
-        boolean hasLetter = false;
-        boolean hasDigit = false;
         for (char c : password) {
-            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-                hasLetter = true;
-            } else if (c >= '0' && c <= '9') {
-                hasDigit = true;
+            if (c < '0' || c > '9') {
+                throw new IllegalArgumentException("Password must contain exactly 6 digits");
             }
-        }
-        if (!hasLetter || !hasDigit) {
-            throw new IllegalArgumentException("Password must contain English letters and digits");
         }
     }
 

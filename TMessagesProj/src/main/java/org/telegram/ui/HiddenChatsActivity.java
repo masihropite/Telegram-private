@@ -7,6 +7,7 @@ package org.telegram.ui;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Typeface;
+import android.text.InputFilter;
 import android.text.InputType;
 import android.text.method.DigitsKeyListener;
 import android.view.Gravity;
@@ -36,6 +37,7 @@ public class HiddenChatsActivity extends BaseFragment {
     private HiddenChatsVault vault;
     private LinearLayout content;
     private LinearLayout rows;
+    private boolean handedOffToHiddenList;
 
     public HiddenChatsActivity(int account) {
         super();
@@ -51,9 +53,6 @@ public class HiddenChatsActivity extends BaseFragment {
 
     @Override
     protected View createView(Context context) {
-        if (getParentActivity() != null) {
-            getParentActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        }
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setTitle("گفتگوهای مخفی");
 
@@ -102,9 +101,10 @@ public class HiddenChatsActivity extends BaseFragment {
         if (getParentActivity() == null) return;
         final EditText password = new EditText(getParentActivity());
         password.setSingleLine(true);
-        password.setKeyListener(DigitsKeyListener.getInstance("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"));
-        password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        password.setHint("حداقل ۸ نویسه؛ حروف و اعداد انگلیسی");
+        password.setKeyListener(DigitsKeyListener.getInstance("0123456789"));
+        password.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        password.setFilters(new InputFilter[] { new InputFilter.LengthFilter(6) });
+        password.setHint("رمز عددی ۶ رقمی");
         AlertDialog dialog = new AlertDialog.Builder(getParentActivity())
                 .setTitle(vault.isConfigured() ? "باز کردن گفتگوهای مخفی" : "ایجاد رمز عبور")
                 .setView(password)
@@ -117,7 +117,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
-                    refreshRows();
+                    openHiddenDialogs();
                 } else {
                     requestPasswordConfirmation(entered.clone());
                     dialog.dismiss();
@@ -135,8 +135,9 @@ public class HiddenChatsActivity extends BaseFragment {
     private void requestPasswordConfirmation(char[] first) {
         final EditText confirmation = new EditText(getParentActivity());
         confirmation.setSingleLine(true);
-        confirmation.setKeyListener(DigitsKeyListener.getInstance("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"));
-        confirmation.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        confirmation.setKeyListener(DigitsKeyListener.getInstance("0123456789"));
+        confirmation.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        confirmation.setFilters(new InputFilter[] { new InputFilter.LengthFilter(6) });
         new AlertDialog.Builder(getParentActivity())
                 .setTitle("تأیید رمز عبور")
                 .setMessage("همان رمز عبور را دوباره وارد کنید.")
@@ -150,7 +151,7 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
-                        refreshRows();
+                        openHiddenDialogs();
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
                     } finally {
@@ -159,6 +160,15 @@ public class HiddenChatsActivity extends BaseFragment {
                         confirmation.setText("");
                     }
                 }).show();
+    }
+
+    private void openHiddenDialogs() {
+        if (vault == null || !vault.isUnlocked()) return;
+        android.os.Bundle args = new android.os.Bundle();
+        args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_DEFAULT);
+        args.putBoolean("hiddenChatsMode", true);
+        handedOffToHiddenList = true;
+        presentFragment(new DialogsActivity(args));
     }
 
     private void refreshRows() {
@@ -267,10 +277,7 @@ public class HiddenChatsActivity extends BaseFragment {
 
     @Override
     public void onFragmentDestroy() {
-        if (vault != null) vault.lock();
-        // Keep FLAG_SECURE on the host window for the rest of this app
-        // session. A hidden chat may be the fragment opened immediately after
-        // this one; clearing the flag here could expose that chat in Recents.
+        if (!handedOffToHiddenList && vault != null) vault.lock();
         super.onFragmentDestroy();
     }
 }

@@ -159,7 +159,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         dialogsType = type;
         folderId = folder;
         isOnlySelect = onlySelect;
-        hasHints = folder == 0 && type == 0 && !onlySelect;
+        hasHints = folder == 0 && type == 0 && !onlySelect && (fragment == null || !fragment.isHiddenChatsMode());
         selectedDialogs = selected;
         currentAccount = account;
         communityId = fragment != null ? fragment.getCommunityId() : 0;
@@ -1657,25 +1657,26 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         MessagesController messagesController = MessagesController.getInstance(currentAccount);
 
         ArrayList<TLRPC.Dialog> array;
-        if (communityId != 0) {
+        boolean hiddenChatsMode = parentFragment != null && parentFragment.isHiddenChatsMode();
+        if (hiddenChatsMode) {
+            array = new ArrayList<>(messagesController.getAllDialogs());
+        } else if (communityId != 0) {
             array = messagesController.getDialogsByCommunity(communityId);
         } else {
             array = parentFragment.getDialogsArray(currentAccount, dialogsType, folderId, dialogsListFrozen);
-            if (array == null) {
-                array = new ArrayList<>();
-            }
+            if (array == null) array = new ArrayList<>();
         }
 
-        // Hidden chats are removed from the ordinary main list even while
-        // the vault is locked. Selection screens and other folders are untouched.
-        if (dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && folderId == 0 && !isOnlySelect && array != null) {
+        // Hidden chats are filtered from every normal folder and shown only
+        // in the dedicated native Telegram-style list.
+        if (dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect && array != null) {
             HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
-                if (dialog == null || !hiddenVault.isDialogHiddenForFiltering(dialog.id)) {
-                    visibleDialogs.add(dialog);
-                }
+                if (dialog == null) continue;
+                boolean hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
+                if (hiddenChatsMode ? hidden : !hidden) visibleDialogs.add(dialog);
             }
             array = visibleDialogs;
         }
@@ -1686,7 +1687,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             return;
         }
 
-        if (!hasHints && dialogsType == 0 && folderId == 0 && messagesController.isDialogsEndReached(folderId) && !forceUpdatingContacts) {
+        if (!hasHints && (parentFragment == null || !parentFragment.isHiddenChatsMode()) && dialogsType == 0 && folderId == 0 && messagesController.isDialogsEndReached(folderId) && !forceUpdatingContacts) {
             if (messagesController.getAllFoldersDialogsCount() <= 10 && ContactsController.getInstance(currentAccount).doneLoadingContacts && !ContactsController.getInstance(currentAccount).contacts.isEmpty()) {
                 onlineContacts = new ArrayList<>(ContactsController.getInstance(currentAccount).contacts);
                 long selfId = UserConfig.getInstance(currentAccount).clientUserId;

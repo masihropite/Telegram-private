@@ -70,6 +70,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.WindowManager;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -121,6 +122,7 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.VideoEditedInfo;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
@@ -287,6 +289,7 @@ import me.vkryl.android.util.ClickHelper;
 import me.vkryl.core.BitwiseUtils;
 
 public class DialogsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, FloatingDebugProvider, FactorAnimator.Target, MainTabsActivity.TabFragmentDelegate {
+    private boolean hiddenChatsMode;
     private int hiddenTitleTapCount;
     private long hiddenTitleLastTap;
     private final int ADDITIONAL_LIST_HEIGHT_DP = Build.VERSION.SDK_INT >= 31 ? 48 : 0;
@@ -2755,6 +2758,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         if (arguments != null) {
             onlySelect = arguments.getBoolean("onlySelect", false);
+            hiddenChatsMode = arguments.getBoolean("hiddenChatsMode", false);
+            if (hiddenChatsMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                if (activeVault == null || !activeVault.isUnlocked()) return false;
+            }
             canSelectTopics = arguments.getBoolean("canSelectTopics", false);
             cantSendToChannels = arguments.getBoolean("cantSendToChannels", false);
             initialDialogsType = arguments.getInt("dialogsType", DIALOGS_TYPE_DEFAULT);
@@ -2904,6 +2912,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return true;
     }
 
+    public boolean isHiddenChatsMode() {
+        return hiddenChatsMode;
+    }
+
     public static void loadDialogs(AccountInstance accountInstance) {
         int currentAccount = accountInstance.getCurrentAccount();
         if (!dialogsLoaded[currentAccount]) {
@@ -2990,6 +3002,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public void onFragmentDestroy() {
+        if (hiddenChatsMode) {
+            HiddenChatsVault.lockActiveVault();
+            if (getParentActivity() != null) {
+                getParentActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            }
+        }
         super.onFragmentDestroy();
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
@@ -3120,6 +3138,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     @Override
     public View createView(final Context context) {
+        if (hiddenChatsMode && getParentActivity() != null) {
+            getParentActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
         searching = false;
         searchWas = false;
         wasDrawn = false;
@@ -3441,10 +3462,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 logoDrawable.setBounds(0, dp(2), logoDrawable.getIntrinsicWidth(), dp(2) + logoDrawable.getIntrinsicHeight());
                 // a new drawable (also when the view is recreated after a theme switch made elsewhere): remember its tint, the
                 // theme hook only recolors when the color differs from the last one applied
-                logoDrawable.setColorFilter(lastLogoDrawableColor = getThemedColor(Theme.key_telegram_color_dialogsLogo), PorterDuff.Mode.MULTIPLY);
-                SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
-                ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                actionBar.setTitle(ssb, statusDrawable);
+                if (hiddenChatsMode) {
+                    actionBar.setTitle("گفتگوهای مخفی");
+                } else {
+                    logoDrawable.setColorFilter(lastLogoDrawableColor = getThemedColor(Theme.key_telegram_color_dialogsLogo), PorterDuff.Mode.MULTIPLY);
+                    SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
+                    ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    actionBar.setTitle(ssb, statusDrawable);
+                }
                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
             }
             if (folderId == 0) {
@@ -3457,7 +3482,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.setClipContent(true);
         //}
         actionBar.setTitleActionRunnable(() -> {
-            if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0 && communityId == 0) {
+            if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && !hiddenChatsMode && folderId == 0 && communityId == 0) {
                 long now = SystemClock.uptimeMillis();
                 if (now - hiddenTitleLastTap > 1500) {
                     hiddenTitleTapCount = 0;

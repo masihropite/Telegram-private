@@ -33,6 +33,7 @@ import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLitePreparedStatement;
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
@@ -285,6 +286,19 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private boolean filter(Object obj) {
+        long dialogId = 0;
+        if (obj instanceof TLRPC.User) {
+            dialogId = ((TLRPC.User) obj).id;
+        } else if (obj instanceof TLRPC.Chat) {
+            dialogId = -((TLRPC.Chat) obj).id;
+        } else if (obj instanceof TLRPC.EncryptedChat) {
+            dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id);
+        }
+        if (dialogId != 0) {
+            boolean hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount).isDialogHiddenForFiltering(dialogId);
+            boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
+            if (hiddenMode ? !hidden : hidden) return false;
+        }
         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
             return true;
         }
