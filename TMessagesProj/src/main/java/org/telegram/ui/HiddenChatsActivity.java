@@ -80,6 +80,17 @@ public class HiddenChatsActivity extends BaseFragment {
         });
         content.addView(lock, new LinearLayout.LayoutParams(-1, -2));
 
+        Button showHidden = new Button(context);
+        showHidden.setText("مشاهده گفتگوهای مخفی");
+        showHidden.setOnClickListener(v -> {
+            if (vault.isUnlocked()) {
+                openHiddenDialogs();
+            } else {
+                Toast.makeText(getParentActivity(), "ابتدا بخش گفتگوهای مخفی را باز کنید", Toast.LENGTH_SHORT).show();
+            }
+        });
+        content.addView(showHidden, new LinearLayout.LayoutParams(-1, -2));
+
         Button add = new Button(context);
         add.setText("مخفی کردن گفتگوها");
         add.setOnClickListener(v -> openChatPicker());
@@ -117,7 +128,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
-                    openHiddenDialogs();
+                    refreshRows();
                 } else {
                     requestPasswordConfirmation(entered.clone());
                     dialog.dismiss();
@@ -151,7 +162,7 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
-                        openHiddenDialogs();
+                        refreshRows();
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
                     } finally {
@@ -213,8 +224,12 @@ public class HiddenChatsActivity extends BaseFragment {
                     vault.unhideDialog(dialogId);
                     org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
-                } catch (GeneralSecurityException e) {
-                    Toast.makeText(getParentActivity(), "نمایش دوباره گفتگو انجام نشد", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    String message = e instanceof IllegalStateException
+                            ? "فضای گفتگوهای مخفی قفل است؛ ابتدا آن را باز کنید."
+                            : "نمایش دوباره گفتگو انجام نشد.";
+                    Toast.makeText(getParentActivity(), message, Toast.LENGTH_LONG).show();
+                    refreshRows();
                 }
             });
             line.addView(restore, new LinearLayout.LayoutParams(-2, -2));
