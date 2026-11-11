@@ -55,6 +55,9 @@ public class HiddenChatsActivity extends BaseFragment {
 
     @Override
     protected View createView(Context context) {
+        if (getParentActivity() != null) {
+            getParentActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setTitle("گفتگوهای مخفی");
 
@@ -311,8 +314,8 @@ public class HiddenChatsActivity extends BaseFragment {
                 org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                 fragment.finishFragment();
                 refreshRows();
-            } catch (GeneralSecurityException e) {
-                Toast.makeText(getParentActivity(), "مخفی‌کردن گفتگوی انتخاب‌شده انجام نشد", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(getParentActivity(), "مخفی‌کردن گفتگوی انتخاب‌شده انجام نشد؛ بخش گفتگوهای مخفی را دوباره باز کنید.", Toast.LENGTH_LONG).show();
             }
             return true;
         });
@@ -332,12 +335,18 @@ public class HiddenChatsActivity extends BaseFragment {
     @Override
     public void onResume() {
         super.onResume();
+        if (getParentActivity() != null) {
+            getParentActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
         refreshRows();
     }
 
     @Override
     public void onFragmentDestroy() {
         if (!handedOffToHiddenList && vault != null) vault.lock();
+        if (getParentActivity() != null) {
+            getParentActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        }
         super.onFragmentDestroy();
     }
 }
