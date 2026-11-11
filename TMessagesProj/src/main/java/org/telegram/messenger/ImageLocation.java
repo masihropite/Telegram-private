@@ -125,6 +125,13 @@ public class ImageLocation {
     }
 
     public static ImageLocation getForPhoto(TLRPC.PhotoSize photoSize, TLRPC.Photo photo) {
+        return getForPhoto(UserConfig.selectedAccount, photoSize, photo);
+    }
+
+    public static ImageLocation getForPhoto(int currentAccount, TLRPC.PhotoSize photoSize, TLRPC.Photo photo) {
+        if (LocalProfilePhotoVisibility.shouldHidePublicPhoto(currentAccount, photo)) {
+            return null;
+        }
         if (photoSize instanceof TLRPC.TL_photoStrippedSize || photoSize instanceof TLRPC.TL_photoPathSize) {
             ImageLocation imageLocation = new ImageLocation();
             imageLocation.photoSize = photoSize;
