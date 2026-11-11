@@ -212,14 +212,22 @@ public final class HiddenChatsVault {
             return;
         }
         final ArrayList<Long> pendingIds = new ArrayList<>();
+        boolean hasUncachedIds = false;
         for (Long id : dialogIds) {
             if (id == null) continue;
             String key = filterCacheKey(id.longValue());
-            if (!FILTER_CACHE.containsKey(key) && FILTER_CACHE_PENDING.add(key)) {
-                pendingIds.add(id);
+            if (!FILTER_CACHE.containsKey(key)) {
+                hasUncachedIds = true;
+                if (FILTER_CACHE_PENDING.add(key)) {
+                    pendingIds.add(id);
+                }
             }
         }
         if (pendingIds.isEmpty()) {
+            if (hasUncachedIds && onReady != null) {
+                // Join an already queued preload so every adapter gets refreshed.
+                Utilities.globalQueue.postRunnable(() -> AndroidUtilities.runOnUIThread(onReady));
+            }
             return;
         }
         Utilities.globalQueue.postRunnable(() -> {
