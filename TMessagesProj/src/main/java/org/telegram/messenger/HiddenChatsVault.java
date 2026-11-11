@@ -11,6 +11,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
+import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.Utilities;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -31,6 +34,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKeyFactory;
@@ -61,8 +65,11 @@ public final class HiddenChatsVault {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
+    private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
+    private static final Set<String> FILTER_CACHE_PENDING = ConcurrentHashMap.newKeySet();
 
     private final SharedPreferences preferences;
+    private final int account;
     private final Set<Long> hiddenDialogIds = new LinkedHashSet<Long>();
 
     private byte[] salt;
@@ -76,6 +83,7 @@ public final class HiddenChatsVault {
         if (context == null) {
             throw new IllegalArgumentException("Context must not be null");
         }
+        this.account = account;
         preferences = context.getApplicationContext().getSharedPreferences(
                 PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
     }
@@ -195,14 +203,67 @@ public final class HiddenChatsVault {
      * Checks hidden state without unlocking. Only one-way HMAC tokens are
      * persisted, allowing the main chat list to remain filtered while locked.
      */
-    public synchronized boolean isDialogHiddenForFiltering(long dialogId) {
-        try {
-            String token = dialogToken(dialogId);
-            Set<String> tokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-            return tokens != null && tokens.contains(token);
-        } catch (Exception e) {
-            // Fail closed: a keystore failure must not reveal hidden chats.
-            return true;
+    /**
+     * Schedules HMAC checks away from the UI thread. Until a result is ready,
+     * unknown dialogs are treated as hidden so a locked vault never leaks them.
+     */
+    public void prepareDialogFilterCache(List<Long> dialogIds, Runnable onReady) {
+        if (dialogIds == null || dialogIds.isEmpty()) {
+            return;
+        }
+        final ArrayList<Long> pendingIds = new ArrayList<>();
+        for (Long id : dialogIds) {
+            if (id == null) continue;
+            String key = filterCacheKey(id.longValue());
+            if (!FILTER_CACHE.containsKey(key) && FILTER_CACHE_PENDING.add(key)) {
+                pendingIds.add(id);
+            }
+        }
+        if (pendingIds.isEmpty()) {
+            return;
+        }
+        Utilities.globalQueue.postRunnable(() -> {
+            try {
+                Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                Set<String> tokens = storedTokens == null
+                        ? Collections.<String>emptySet()
+                        : new LinkedHashSet<String>(storedTokens);
+                for (Long id : pendingIds) {
+                    boolean hidden;
+                    try {
+                        hidden = tokens.contains(dialogToken(id.longValue()));
+                    } catch (Exception e) {
+                        // Fail closed on cryptographic errors.
+                        hidden = true;
+                    }
+                    FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                }
+            } finally {
+                for (Long id : pendingIds) {
+                    FILTER_CACHE_PENDING.remove(filterCacheKey(id.longValue()));
+                }
+                if (onReady != null) {
+                    AndroidUtilities.runOnUIThread(onReady);
+                }
+            }
+        });
+    }
+
+    public boolean isDialogHiddenForFiltering(long dialogId) {
+        Boolean hidden = FILTER_CACHE.get(filterCacheKey(dialogId));
+        return hidden == null || hidden;
+    }
+
+    private String filterCacheKey(long dialogId) {
+        return account + ":" + dialogId;
+    }
+
+    private void invalidateFilterCache() {
+        String prefix = account + ":";
+        for (String key : FILTER_CACHE.keySet()) {
+            if (key.startsWith(prefix)) {
+                FILTER_CACHE.remove(key);
+            }
         }
     }
 
@@ -248,6 +309,7 @@ public final class HiddenChatsVault {
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
         }
+        invalidateFilterCache();
     }
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
