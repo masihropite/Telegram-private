@@ -12,7 +12,7 @@ This branch adds a device-local hidden-chat area to the Android client.
 6. Use **مشاهده گفتگوهای مخفی** to open the native hidden-chat list. In the management screen, choose **نمایش دوباره** to restore a chat to the normal list.
 7. The two profile-photo controls independently hide the current account's private photo or public fallback photo on this device only. The app refuses to hide one type if no alternate photo exists to remain visible.
 
-The vault is locked when its management fragment is destroyed without handing off to the hidden list, and the hidden-list fragment locks it when that fragment is destroyed. App-background locking has not yet been verified. Android's secure-window flag is set while the hidden dialog list is active and cleared when that fragment is destroyed; it is not a session-wide screenshot lock.
+The vault is locked when its management fragment is destroyed without handing off to the hidden list, when the hidden-list fragment is destroyed, and when the app enters the background. If the app returns while the hidden list was open, the list closes back to the management screen and requires the password again. Android's secure-window flag is set while the hidden dialog list is active and cleared when that fragment is destroyed; it is not a session-wide screenshot lock.
 
 ## Local protection
 
