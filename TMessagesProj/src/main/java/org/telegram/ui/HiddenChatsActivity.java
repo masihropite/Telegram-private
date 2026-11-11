@@ -239,6 +239,7 @@ public class HiddenChatsActivity extends BaseFragment {
         } catch (Exception e) {
             return;
         }
+        boolean filterTokensReady = vault.prepareFilterTokens(ids, this::refreshRows);
         if (ids.isEmpty()) {
             TextView empty = new TextView(getParentActivity());
             empty.setText("هنوز گفتگویی مخفی نشده است.");
@@ -258,7 +259,8 @@ public class HiddenChatsActivity extends BaseFragment {
             line.addView(title, new LinearLayout.LayoutParams(0, dp(getParentActivity(), 56), 1));
             title.setOnClickListener(v -> openHiddenChat(dialogId));
             Button restore = new Button(getParentActivity());
-            restore.setText("نمایش دوباره");
+            restore.setText(filterTokensReady ? "نمایش دوباره" : "در حال آماده‌سازی امن...");
+            restore.setEnabled(filterTokensReady);
             restore.setOnClickListener(v -> {
                 if (!vault.isUnlocked()) {
                     requestPassword(() -> restoreDialog(dialogId));
