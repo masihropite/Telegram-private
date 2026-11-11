@@ -9612,7 +9612,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 searchAdapter.search(searchAdapter.lastSearchString);
             }
         } else if (id == NotificationCenter.reloadDialogPhotos) {
-            updateProfileData(false);
+            avatar = null;
+            avatarBig = null;
+            prevLoadedImageLocation = null;
+            updateProfileData(true);
         } else if (id == NotificationCenter.storiesUpdated || id == NotificationCenter.storiesReadUpdated) {
             if (avatarImage != null) {
                 avatarImage.setHasStories(needInsetForStories());
