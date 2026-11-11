@@ -91,12 +91,6 @@ public class HiddenChatsActivity extends BaseFragment {
         });
         content.addView(showHidden, new LinearLayout.LayoutParams(-1, -2));
 
-        Button add = new Button(context);
-        add.setText("افزودن گفتگو");
-        add.setGravity(Gravity.CENTER);
-        add.setOnClickListener(v -> openChatPicker());
-        content.addView(add, new LinearLayout.LayoutParams(-1, -2));
-
         Button privatePhoto = new Button(context);
         updateProfilePhotoButton(privatePhoto, true);
         privatePhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(true, privatePhoto));
@@ -143,6 +137,8 @@ public class HiddenChatsActivity extends BaseFragment {
         org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
                 org.telegram.messenger.NotificationCenter.updateInterfaces,
                 org.telegram.messenger.MessagesController.UPDATE_MASK_AVATAR);
+        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
+                org.telegram.messenger.NotificationCenter.reloadDialogPhotos);
     }
 
     private void requestPassword() {
@@ -165,6 +161,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
+                    org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
                 } else {
                     requestPasswordConfirmation(entered.clone());
@@ -199,6 +196,7 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
+                        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                         refreshRows();
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
@@ -237,12 +235,27 @@ public class HiddenChatsActivity extends BaseFragment {
             return;
         }
         if (ids.isEmpty()) {
+            rows.setGravity(Gravity.CENTER);
+            rows.setMinimumHeight(dp(getParentActivity(), 300));
             TextView empty = new TextView(getParentActivity());
             empty.setText("هنوز گفتگویی مخفی نشده است.");
+            empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(getParentActivity(), 20), 0, dp(getParentActivity(), 12));
-            rows.addView(empty);
+            rows.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+            Button add = new Button(getParentActivity());
+            add.setText("افزودن گفتگو");
+            add.setGravity(Gravity.CENTER);
+            add.setOnClickListener(v -> openChatPicker());
+            rows.addView(add, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
+        rows.setGravity(Gravity.TOP);
+        rows.setMinimumHeight(0);
+        Button addMore = new Button(getParentActivity());
+        addMore.setText("افزودن گفتگو");
+        addMore.setGravity(Gravity.CENTER);
+        addMore.setOnClickListener(v -> openChatPicker());
+        rows.addView(addMore, new LinearLayout.LayoutParams(-1, -2));
         for (Long id : ids) {
             final long dialogId = id;
             LinearLayout line = new LinearLayout(getParentActivity());

@@ -25,6 +25,7 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
@@ -923,11 +924,41 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 fallbackPhotoIndex = -1;
                 TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
                 TLRPC.UserFull fullUser = MessagesController.getInstance(currentAccount).getUserFull(dialogId);
-                if (fullUser != null && fullUser.personal_photo != null) {
+                boolean hidePrivatePhoto = user != null && user.self
+                        && org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+                boolean hidePublicPhoto = user != null && user.self
+                        && org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+                if (user != null && user.self && user.photo != null) {
+                    boolean hideCurrentPhoto = user.photo.personal ? hidePrivatePhoto : hidePublicPhoto;
+                    if (hideCurrentPhoto) {
+                        long hiddenPhotoId = user.photo.photo_id;
+                        for (int i = arrayList.size() - 1; i >= 0; i--) {
+                            TLRPC.Photo item = arrayList.get(i);
+                            if (item != null && item.id == hiddenPhotoId) {
+                                arrayList.remove(i);
+                            }
+                        }
+                    }
+                }
+                if (fullUser != null && hidePrivatePhoto && fullUser.personal_photo != null) {
+                    long hiddenPhotoId = fullUser.personal_photo.id;
+                    for (int i = arrayList.size() - 1; i >= 0; i--) {
+                        TLRPC.Photo item = arrayList.get(i);
+                        if (item != null && item.id == hiddenPhotoId) arrayList.remove(i);
+                    }
+                }
+                if (fullUser != null && hidePublicPhoto && fullUser.fallback_photo != null) {
+                    long hiddenPhotoId = fullUser.fallback_photo.id;
+                    for (int i = arrayList.size() - 1; i >= 0; i--) {
+                        TLRPC.Photo item = arrayList.get(i);
+                        if (item != null && item.id == hiddenPhotoId) arrayList.remove(i);
+                    }
+                }
+                if (fullUser != null && fullUser.personal_photo != null && !hidePrivatePhoto) {
                     arrayList.add(0, fullUser.personal_photo);
                     customAvatarIndex = 0;
                 }
-                if (user != null && user.self) {
+                if (user != null && user.self && !hidePublicPhoto) {
                     if (UserObject.hasFallbackPhoto(fullUser)) {
                         arrayList.add(fullUser.fallback_photo);
                         fallbackPhotoIndex = arrayList.size() - 1;

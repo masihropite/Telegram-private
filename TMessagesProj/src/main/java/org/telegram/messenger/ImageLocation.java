@@ -165,7 +165,7 @@ public class ImageLocation {
     }
 
     private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type, boolean hiddenPhotoIsPrivate) {
-        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL || type == TYPE_STRIPPED) {
+        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             return null;
         }
         TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
@@ -174,6 +174,14 @@ public class ImageLocation {
         }
         TLRPC.Photo alternatePhoto = hiddenPhotoIsPrivate ? userFull.fallback_photo : userFull.personal_photo;
         if (alternatePhoto == null || alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
+            return null;
+        }
+        if (type == TYPE_STRIPPED) {
+            for (TLRPC.PhotoSize size : alternatePhoto.sizes) {
+                if (size instanceof TLRPC.TL_photoStrippedSize) {
+                    return ImageLocation.getForPhoto(size, alternatePhoto);
+                }
+            }
             return null;
         }
         int targetSize = type == TYPE_BIG ? 1000 : 100;
