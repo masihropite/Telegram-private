@@ -51,11 +51,13 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class HiddenChatsVault {
 
-    private static final String PREFS_NAME = "hidden_chats_vault_v1";
+    private static final String PREFS_NAME = "hidden_chats_vault_v2";
+    private static final String LEGACY_PREFS_NAME = "hidden_chats_vault_v1";
     private static final String KEY_PAYLOAD = "encrypted_payload";
     private static final String KEY_FILTER_TOKENS = "hidden_dialog_filter_tokens";
     private static final String KEY_FAILED_ATTEMPTS = "failed_unlock_attempts";
     private static final String KEY_NEXT_UNLOCK_TIME = "next_unlock_allowed_at";
+    private static final String KEY_OWNER_USER_ID = "owner_user_id";
     private static final String KEYSTORE_ALIAS = "telegram_hidden_chats_filter_hmac_v1";
     private static final int LEGACY_FORMAT_VERSION = 1;
     private static final int FORMAT_VERSION = 2;
@@ -95,8 +97,34 @@ public final class HiddenChatsVault {
             throw new IllegalArgumentException("Context must not be null");
         }
         this.account = account;
-        preferences = context.getApplicationContext().getSharedPreferences(
-                PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+        Context appContext = context.getApplicationContext();
+        long userId = UserConfig.getInstance(account).getClientUserId();
+        String scopedPrefsName = userId != 0
+                ? PREFS_NAME + "_user_" + userId
+                : PREFS_NAME + "_account_" + account;
+        SharedPreferences scopedPreferences = appContext.getSharedPreferences(scopedPrefsName, Context.MODE_PRIVATE);
+
+        // One-time migration from the older account-slot preferences. Record
+        // the owner in the legacy file so a different account later reusing
+        // the same slot cannot inherit the previous account's hidden list.
+        if (userId != 0 && !scopedPreferences.contains(KEY_PAYLOAD)) {
+            SharedPreferences legacyPreferences = appContext.getSharedPreferences(
+                    LEGACY_PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+            long legacyOwner = legacyPreferences.getLong(KEY_OWNER_USER_ID, 0L);
+            if (legacyPreferences.contains(KEY_PAYLOAD) && (legacyOwner == 0L || legacyOwner == userId)) {
+                SharedPreferences.Editor editor = scopedPreferences.edit();
+                editor.putString(KEY_PAYLOAD, legacyPreferences.getString(KEY_PAYLOAD, ""));
+                Set<String> legacyTokens = legacyPreferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                editor.putStringSet(KEY_FILTER_TOKENS, legacyTokens == null
+                        ? Collections.<String>emptySet() : new LinkedHashSet<String>(legacyTokens));
+                editor.putInt(KEY_FAILED_ATTEMPTS, legacyPreferences.getInt(KEY_FAILED_ATTEMPTS, 0));
+                editor.putLong(KEY_NEXT_UNLOCK_TIME, legacyPreferences.getLong(KEY_NEXT_UNLOCK_TIME, 0L));
+                editor.putLong(KEY_OWNER_USER_ID, userId);
+                editor.commit();
+                legacyPreferences.edit().putLong(KEY_OWNER_USER_ID, userId).apply();
+            }
+        }
+        preferences = scopedPreferences;
     }
 
     public void registerAsActiveVault() {
@@ -390,6 +418,7 @@ public final class HiddenChatsVault {
         boolean saved = preferences.edit()
                 .putString(KEY_PAYLOAD, Base64.encodeToString(payload.array(), Base64.NO_WRAP))
                 .putStringSet(KEY_FILTER_TOKENS, filterTokens)
+                .putLong(KEY_OWNER_USER_ID, UserConfig.getInstance(account).getClientUserId())
                 .commit();
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
