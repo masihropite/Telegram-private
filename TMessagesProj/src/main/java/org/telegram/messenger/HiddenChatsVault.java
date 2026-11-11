@@ -53,6 +53,8 @@ public final class HiddenChatsVault {
     private static final String PREFS_NAME = "hidden_chats_vault_v1";
     private static final String KEY_PAYLOAD = "encrypted_payload";
     private static final String KEY_FILTER_TOKENS = "hidden_dialog_filter_tokens";
+    private static final String KEY_FAILED_ATTEMPTS = "failed_unlock_attempts";
+    private static final String KEY_NEXT_UNLOCK_TIME = "next_unlock_allowed_at";
     private static final String KEYSTORE_ALIAS = "telegram_hidden_chats_filter_hmac_v1";
     private static final int FORMAT_VERSION = 1;
     private static final int SALT_BYTES = 16;
@@ -140,6 +142,12 @@ public final class HiddenChatsVault {
         if (!isConfigured()) {
             throw new IllegalStateException("Hidden chats vault has not been configured");
         }
+        long now = System.currentTimeMillis();
+        long nextAllowedAt = preferences.getLong(KEY_NEXT_UNLOCK_TIME, 0L);
+        if (now < nextAllowedAt) {
+            long remainingSeconds = Math.max(1L, (nextAllowedAt - now + 999L) / 1000L);
+            throw new GeneralSecurityException("Too many incorrect attempts. Try again in " + remainingSeconds + " seconds.");
+        }
         validatePassword(password);
 
         byte[] payload;
@@ -176,13 +184,25 @@ public final class HiddenChatsVault {
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
+            preferences.edit().remove(KEY_FAILED_ATTEMPTS).remove(KEY_NEXT_UNLOCK_TIME).apply();
         } catch (GeneralSecurityException e) {
             clear(candidateKey);
+            recordFailedUnlockAttempt();
             throw new GeneralSecurityException("Incorrect password or damaged hidden chats data", e);
         } catch (RuntimeException e) {
             clear(candidateKey);
+            recordFailedUnlockAttempt();
             throw new GeneralSecurityException("Hidden chats data is invalid", e);
         }
+    }
+
+    private void recordFailedUnlockAttempt() {
+        int failures = Math.min(20, preferences.getInt(KEY_FAILED_ATTEMPTS, 0) + 1);
+        long delay = Math.min(15L * 60L * 1000L, 1000L << Math.min(failures - 1, 10));
+        preferences.edit()
+                .putInt(KEY_FAILED_ATTEMPTS, failures)
+                .putLong(KEY_NEXT_UNLOCK_TIME, System.currentTimeMillis() + delay)
+                .apply();
     }
 
     /** Locks the vault and clears decrypted IDs and key material from memory. */
