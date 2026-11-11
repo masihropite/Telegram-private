@@ -269,6 +269,10 @@ public final class HiddenChatsVault {
         });
     }
 
+    public boolean isDialogFilterCached(long dialogId) {
+        return FILTER_CACHE.containsKey(filterCacheKey(dialogId));
+    }
+
     public boolean isDialogHiddenForFiltering(long dialogId) {
         Boolean hidden = FILTER_CACHE.get(filterCacheKey(dialogId));
         return hidden == null || hidden;
