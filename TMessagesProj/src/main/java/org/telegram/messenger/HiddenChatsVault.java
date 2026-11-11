@@ -65,9 +65,9 @@ public final class HiddenChatsVault {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
-    private static final String FILTER_TOKEN_FAILED = "\u0000";
+    private static final String FILTER_TOKEN_FAILED = "__FILTER_TOKEN_FAILED__";
     private static final ConcurrentHashMap<Long, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<Long, String>();
-    private static final Set<Long> FILTER_TOKEN_PENDING = ConcurrentHashMap.newKeySet();
+    private static final Set<Long> FILTER_TOKEN_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
     private static final ExecutorService FILTER_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "HiddenChatsFilter");
         thread.setDaemon(true);
