@@ -940,6 +940,20 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                         }
                     }
                 }
+                if (fullUser != null && hidePrivatePhoto && fullUser.personal_photo != null) {
+                    long hiddenPhotoId = fullUser.personal_photo.id;
+                    for (int i = arrayList.size() - 1; i >= 0; i--) {
+                        TLRPC.Photo item = arrayList.get(i);
+                        if (item != null && item.id == hiddenPhotoId) arrayList.remove(i);
+                    }
+                }
+                if (fullUser != null && hidePublicPhoto && fullUser.fallback_photo != null) {
+                    long hiddenPhotoId = fullUser.fallback_photo.id;
+                    for (int i = arrayList.size() - 1; i >= 0; i--) {
+                        TLRPC.Photo item = arrayList.get(i);
+                        if (item != null && item.id == hiddenPhotoId) arrayList.remove(i);
+                    }
+                }
                 if (fullUser != null && fullUser.personal_photo != null && !hidePrivatePhoto) {
                     arrayList.add(0, fullUser.personal_photo);
                     customAvatarIndex = 0;
