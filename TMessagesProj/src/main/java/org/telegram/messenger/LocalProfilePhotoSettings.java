@@ -34,10 +34,20 @@ public final class LocalProfilePhotoSettings {
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
         SharedPreferences preferences = getPreferences(context, account);
         boolean otherHidden = preferences.getBoolean(privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE, false);
-        if (hidden && otherHidden) {
+        if (hidden && (otherHidden || !hasPhoto(context, account, !privatePhoto))) {
             return false;
         }
         String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
         return preferences.edit().putBoolean(key, hidden).commit();
+    }
+
+    private static boolean hasPhoto(Context context, int account, boolean privatePhoto) {
+        TLRPC.User user = MessagesController.getInstance(account).getUser(UserConfig.getInstance(account).getClientUserId());
+        if (user == null) return false;
+        TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
+        if (privatePhoto) {
+            return user.photo != null && user.photo.personal || full != null && full.personal_photo != null;
+        }
+        return user.photo != null && !user.photo.personal || full != null && UserObject.hasFallbackPhoto(full);
     }
 }
