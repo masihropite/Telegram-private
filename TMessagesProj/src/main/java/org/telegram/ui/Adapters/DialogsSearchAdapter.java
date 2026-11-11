@@ -296,7 +296,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 return false;
             }
             if (dialogsActivity != null && dialogsActivity.isHiddenChatsMode()) {
-                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                 return activeVault == null || !activeVault.isUnlocked() || !activeVault.isDialogHidden(dialogId);
             }
             HiddenChatsVault vault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
@@ -341,7 +341,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
             boolean hidden;
             if (hiddenMode) {
-                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                 hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
             } else {
                 hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
@@ -1519,7 +1519,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
             boolean hidden;
             if (hiddenMode) {
-                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                 hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
                 if (!hidden) {
                     return null;
