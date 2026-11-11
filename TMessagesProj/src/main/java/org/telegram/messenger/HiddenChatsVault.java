@@ -271,11 +271,21 @@ public final class HiddenChatsVault {
                     tokens = null;
                 }
                 for (Long id : pendingIds) {
-                    boolean hidden = tokens == null;
-                    if (tokens != null) {
+                    boolean hidden;
+                    if (tokens == null) {
+                        // A preference read failure must never reveal hidden chats.
+                        hidden = true;
+                    } else if (tokens.isEmpty()) {
+                        // No hidden IDs means no Keystore/HMAC work is needed.
+                        hidden = false;
+                    } else {
                         try {
-                            String token = dialogToken(id.longValue());
-                            FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
+                            String key = filterCacheKey(id.longValue());
+                            String token = FILTER_TOKEN_CACHE.get(key);
+                            if (token == null) {
+                                token = dialogToken(id.longValue());
+                                FILTER_TOKEN_CACHE.put(key, token);
+                            }
                             hidden = tokens.contains(token);
                         } catch (Exception e) {
                             hidden = true;
