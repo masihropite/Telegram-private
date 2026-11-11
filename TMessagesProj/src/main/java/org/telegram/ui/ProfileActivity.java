@@ -801,7 +801,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (userId != 0) {
                 TLRPC.User user = getMessagesController().getUser(userId);
                 if (user != null && user.photo != null && user.photo.photo_big != null) {
-                    photoBig = user.photo.photo_big;
+                    boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                            && (user.photo.personal
+                            ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                            : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount));
+                    if (!hideCurrentPhoto) {
+                        photoBig = user.photo.photo_big;
+                    }
                 }
             } else if (chatId != 0) {
                 TLRPC.Chat chat = getMessagesController().getChat(chatId);
@@ -6987,13 +6993,35 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         TLRPC.Photo carouselPhoto = avatarsViewPager != null ? avatarsViewPager.getPhoto(carouselPosition) : null;
         if (userId != 0) {
             TLRPC.User user = getMessagesController().getUser(userId);
-            if (user.photo != null && user.photo.photo_big != null) {
+            if (user != null && user.photo != null && user.photo.photo_big != null) {
+                boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                        && (user.photo.personal
+                        ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                        : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount));
+                boolean isCurrentPhoto = carouselPhoto == null || carouselPhoto.id == user.photo.photo_id;
                 PhotoViewer.getInstance().setParentActivity(ProfileActivity.this);
-                if (user.photo.dc_id != 0) {
-                    user.photo.photo_big.dc_id = user.photo.dc_id;
+                TLRPC.FileLocation fileLocation;
+                TLRPC.Photo photo;
+                if (hideCurrentPhoto && isCurrentPhoto) {
+                    TLRPC.Photo alternatePhoto = userInfo == null ? null
+                            : (user.photo.personal ? userInfo.fallback_photo : userInfo.personal_photo);
+                    if (alternatePhoto == null || alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
+                        return;
+                    }
+                    TLRPC.PhotoSize alternateSize = FileLoader.getClosestPhotoSizeWithSize(alternatePhoto.sizes, 1000);
+                    if (alternateSize == null || alternateSize.location == null) {
+                        return;
+                    }
+                    fileLocation = alternateSize.location;
+                    photo = alternatePhoto;
+                } else {
+                    if (user.photo.dc_id != 0) {
+                        user.photo.photo_big.dc_id = user.photo.dc_id;
+                    }
+                    fileLocation = carouselImageLocation != null && carouselImageLocation.location != null
+                            ? carouselImageLocation.location : user.photo.photo_big;
+                    photo = carouselPhoto;
                 }
-                TLRPC.FileLocation fileLocation = carouselImageLocation != null && carouselImageLocation.location != null ? carouselImageLocation.location : user.photo.photo_big;
-                TLRPC.Photo photo = carouselPhoto;
                 if (photo == null && userInfo != null) {
                     if (user.photo.personal && userInfo.personal_photo instanceof TLRPC.TL_photo) {
                         photo = userInfo.personal_photo;
