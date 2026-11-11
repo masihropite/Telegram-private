@@ -125,6 +125,13 @@ public class ImageLocation {
     }
 
     public static ImageLocation getForPhoto(TLRPC.PhotoSize photoSize, TLRPC.Photo photo) {
+        return getForPhoto(UserConfig.selectedAccount, photoSize, photo);
+    }
+
+    public static ImageLocation getForPhoto(int currentAccount, TLRPC.PhotoSize photoSize, TLRPC.Photo photo) {
+        if (LocalProfilePhotoVisibility.shouldHidePublicPhoto(currentAccount, photo)) {
+            return null;
+        }
         if (photoSize instanceof TLRPC.TL_photoStrippedSize || photoSize instanceof TLRPC.TL_photoPathSize) {
             ImageLocation imageLocation = new ImageLocation();
             imageLocation.photoSize = photoSize;
@@ -166,6 +173,10 @@ public class ImageLocation {
 
     public static ImageLocation getForUser(int currentAccount, TLRPC.User user, int type) {
         if (user == null || user.photo == null) {
+            return null;
+        }
+        // Local-only TelegramZ override: never alter the server-side profile.
+        if (LocalProfilePhotoVisibility.shouldHideUserPhoto(currentAccount, user)) {
             return null;
         }
         if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {

@@ -292,8 +292,16 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             } else if (peer.peer.chat_id != 0) {
                 dialogId = -peer.peer.chat_id;
             }
-            return dialogId != 0 && new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
-                    .isDialogHiddenForFiltering(dialogId);
+            if (dialogId == 0) {
+                return false;
+            }
+            if (dialogsActivity != null && dialogsActivity.isHiddenChatsMode()) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
+                return activeVault == null || !activeVault.isUnlocked() || !activeVault.isDialogHidden(dialogId);
+            }
+            HiddenChatsVault vault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
+            vault.prepareFilterTokens(java.util.Collections.singletonList(dialogId), this::notifyDataSetChanged);
+            return vault.isDialogHiddenForFiltering(dialogId);
         }
 
         private TLRPC.TL_topPeer getVisiblePeer(int position) {
@@ -333,7 +341,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
             boolean hidden;
             if (hiddenMode) {
-                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                 hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
             } else {
                 hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
@@ -1507,8 +1515,23 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) recent).id);
             }
         }
-        if (dialogId != 0 && new HiddenChatsVault(mContext, currentAccount).isDialogHiddenForFiltering(dialogId)) {
-            return null;
+        if (dialogId != 0) {
+            boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
+            boolean hidden;
+            if (hiddenMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
+                hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
+                if (!hidden) {
+                    return null;
+                }
+            } else {
+                HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
+                vault.prepareFilterTokens(java.util.Collections.singletonList(dialogId), this::notifyDataSetChanged);
+                hidden = vault.isDialogHiddenForFiltering(dialogId);
+                if (hidden) {
+                    return null;
+                }
+            }
         }
         return object;
     }

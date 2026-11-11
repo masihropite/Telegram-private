@@ -2760,7 +2760,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             onlySelect = arguments.getBoolean("onlySelect", false);
             hiddenChatsMode = arguments.getBoolean("hiddenChatsMode", false);
             if (hiddenChatsMode) {
-                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                 if (activeVault == null || !activeVault.isUnlocked()) return false;
             }
             canSelectTopics = arguments.getBoolean("canSelectTopics", false);
@@ -2917,7 +2917,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void openHiddenChatPicker() {
-        HiddenChatsVault vault = HiddenChatsVault.getActiveVault();
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
         if (vault == null || !vault.isUnlocked()) {
             Toast.makeText(getParentActivity(), "ابتدا گفتگوهای مخفی را باز کنید", Toast.LENGTH_SHORT).show();
             return;
@@ -7015,6 +7015,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onResume() {
         super.onResume();
+        if (hiddenChatsMode) {
+            HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
+            if (activeVault == null || !activeVault.isUnlocked()) {
+                // Returning from the background locks the vault. Pop the
+                // hidden list so the password screen is visible again.
+                finishFragment();
+                return;
+            }
+        }
         if (dialogStoriesCell != null) {
             dialogStoriesCell.onResume();
         }

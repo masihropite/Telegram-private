@@ -6969,6 +6969,42 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
     }
 
+    private void secureHiddenChatStacks() {
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+        if (vault == null || vault.isUnlocked()) {
+            return;
+        }
+        secureHiddenChatStack(actionBarLayout);
+        if (rightActionBarLayout != null) {
+            secureHiddenChatStack(rightActionBarLayout);
+        }
+        if (layersActionBarLayout != null) {
+            secureHiddenChatStack(layersActionBarLayout);
+        }
+    }
+
+    private void secureHiddenChatStack(INavigationLayout layout) {
+        if (layout == null) {
+            return;
+        }
+        List<BaseFragment> stack = layout.getFragmentStack();
+        int hiddenListIndex = -1;
+        for (int i = 0; i < stack.size(); i++) {
+            BaseFragment fragment = stack.get(i);
+            if (fragment instanceof DialogsActivity && ((DialogsActivity) fragment).isHiddenChatsMode()) {
+                hiddenListIndex = i;
+            }
+        }
+        if (hiddenListIndex >= 0) {
+            // A hidden conversation may have been open when the app went to
+            // the background. The vault is now locked, so close everything
+            // above the hidden list before any hidden content is redrawn.
+            while (stack.size() > hiddenListIndex + 1) {
+                layout.closeLastFragment(true);
+            }
+        }
+    }
+
     @Override
     public boolean onPictureInPictureRequested() {
         PipCoordinator.getInstance().onPictureInPictureRequested();
@@ -7222,6 +7258,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         checkFreeDiscSpace(0);
         MediaController.checkGallery();
         onPasscodeResume();
+        secureHiddenChatStacks();
         if (passcodeDialog == null || passcodeDialog.passcodeView.getVisibility() != View.VISIBLE) {
             actionBarLayout.onResume();
             if (AndroidUtilities.isTablet()) {

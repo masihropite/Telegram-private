@@ -56,6 +56,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Stack;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -115,9 +116,9 @@ public class SpoilerEffect extends Drawable {
             default:
             case SharedConfig.PERFORMANCE_CLASS_LOW:
             case SharedConfig.PERFORMANCE_CLASS_AVERAGE:
-                return 10;
+                return 6;
             case SharedConfig.PERFORMANCE_CLASS_HIGH:
-                return 30;
+                return 18;
         }
     }
 
@@ -126,9 +127,9 @@ public class SpoilerEffect extends Drawable {
             default:
             case SharedConfig.PERFORMANCE_CLASS_LOW:
             case SharedConfig.PERFORMANCE_CLASS_AVERAGE:
-                return 100;
+                return 60;
             case SharedConfig.PERFORMANCE_CLASS_HIGH:
-                return 150;
+                return 100;
         }
     }
 
@@ -405,7 +406,7 @@ public class SpoilerEffect extends Drawable {
             for (int i = 0; i < np; i++) {
                 float rf = particleRands[ri];
                 if (rf == -1f) {
-                    rf = Utilities.fastRandom.nextFloat();
+                    rf = ThreadLocalRandom.current().nextFloat();
                     particleRands[ri] = rf;
                 }
                 ri++;
@@ -427,9 +428,9 @@ public class SpoilerEffect extends Drawable {
                 newParticle.vecY = (float) Math.sin(angleRad);
 
                 newParticle.currentTime = 0f;
-                newParticle.lifeTime = 1000 + Utilities.fastRandom.nextInt(2000);
+                newParticle.lifeTime = 1000 + ThreadLocalRandom.current().nextInt(2000);
                 newParticle.velocity = 4f + rf * 6f;
-                newParticle.alpha = Utilities.fastRandom.nextInt(alphaCount);
+                newParticle.alpha = ThreadLocalRandom.current().nextInt(alphaCount);
 
                 particles.add(newParticle);
             }

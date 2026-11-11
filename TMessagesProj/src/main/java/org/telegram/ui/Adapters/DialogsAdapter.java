@@ -188,7 +188,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             position--;
         }
         if (hasHints) {
-            position -= 2 + MessagesController.getInstance(currentAccount).hintDialogs.size();
+            position -= 2 + visibleHintDialogs.size();
         }
         if (allowForwardAsStories && dialogsType == DialogsActivity.DIALOGS_TYPE_FORWARD) {
             position -= 1;
@@ -542,13 +542,42 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         return archiveHintCell != null ? archiveHintCell.getViewPager() : null;
     }
 
+    private final ArrayList<TLRPC.TL_topPeer> visibleHintDialogs = new ArrayList<>();
+
+    private long getTopPeerDialogId(TLRPC.TL_topPeer peer) {
+        if (peer == null || peer.peer == null) {
+            return 0;
+        }
+        if (peer.peer.user_id != 0) {
+            return peer.peer.user_id;
+        } else if (peer.peer.channel_id != 0) {
+            return -peer.peer.channel_id;
+        } else if (peer.peer.chat_id != 0) {
+            return -peer.peer.chat_id;
+        }
+        return 0;
+    }
+
     public void updateHasHints() {
-        hasHints = folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect && !MessagesController.getInstance(currentAccount).hintDialogs.isEmpty();
+        visibleHintDialogs.clear();
+        boolean allowHints = communityId == 0 && folderId == 0
+                && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect
+                && (parentFragment == null || !parentFragment.isHiddenChatsMode());
+        if (allowHints) {
+            HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
+            for (TLRPC.TL_topPeer peer : MessagesController.getInstance(currentAccount).hintDialogs) {
+                long dialogId = getTopPeerDialogId(peer);
+                if (dialogId != 0 && !vault.isDialogHiddenForFiltering(dialogId)) {
+                    visibleHintDialogs.add(peer);
+                }
+            }
+        }
+        hasHints = allowHints && !visibleHintDialogs.isEmpty();
     }
 
     boolean isCalculatingDiff;
     boolean updateListPending;
-    private final static boolean ALLOW_UPDATE_IN_BACKGROUND = BuildVars.DEBUG_PRIVATE_VERSION;
+    private final static boolean ALLOW_UPDATE_IN_BACKGROUND = true;
 
     public void updateList(Runnable saveScrollPosition) {
         if (isCalculatingDiff) {
@@ -1601,15 +1630,23 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
 
     private void updateItemListForCommunity() {
-        itemInternals.clear();
-        updateHasHints();
-
         MessagesController messagesController = MessagesController.getInstance(currentAccount);
         MessagesController.CommunityPeersDialog communityPeersDialog = messagesController.buildCommunityPeers(communityId);
 
-        dialogsCount = communityPeersDialog.getDialogsCount();
-        isEmpty = false;
+        ArrayList<Long> dialogIds = new ArrayList<>();
+        collectCommunityDialogIds(communityPeersDialog.chatsYouAreIn, dialogIds);
+        collectCommunityDialogIds(communityPeersDialog.chatsYouCanView, dialogIds);
+        collectCommunityDialogIds(communityPeersDialog.chatsYouCanJoin, dialogIds);
+        collectCommunityDialogIds(communityPeersDialog.chatsOther, dialogIds);
+        HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+        if (!hiddenVault.prepareFilterTokens(dialogIds, () -> updateList(null))) {
+            return;
+        }
 
+        itemInternals.clear();
+        updateHasHints();
+        dialogsCount = 0;
+        isEmpty = false;
 
         final int N = dialogsType == DialogsActivity.DIALOGS_TYPE_FORWARD ? 2 : 4;
         for (int b = 0; b < N; b++) {
@@ -1629,10 +1666,16 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 name = getString(R.string.CommunitySectionHiddenChats);
             }
 
-            if (!array.isEmpty()) {
+            ArrayList<MessagesController.CommunityPeerDialog> visiblePeers = new ArrayList<>();
+            for (MessagesController.CommunityPeerDialog peer : array) {
+                long dialogId = getCommunityDialogId(peer);
+                if (dialogId != 0 && !hiddenVault.isDialogHiddenForFiltering(dialogId)) {
+                    visiblePeers.add(peer);
+                }
+            }
+            if (!visiblePeers.isEmpty()) {
                 itemInternals.add(new ItemInternal(VIEW_TYPE_HEADER_3, name));
-                for (int k = 0; k < array.size(); k++) {
-                    MessagesController.CommunityPeerDialog peer = array.get(k);
+                for (MessagesController.CommunityPeerDialog peer : visiblePeers) {
                     if (peer.dialog != null) {
                         itemInternals.add(new ItemInternal(VIEW_TYPE_DIALOG, peer.dialog));
                     } else if (peer.chat != null) {
@@ -1640,7 +1683,30 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     } else if (peer.user != null) {
                         itemInternals.add(new ItemInternal(VIEW_TYPE_DIALOG_COMMUNITY, peer.user));
                     }
+                    dialogsCount++;
                 }
+            }
+        }
+    }
+
+    private long getCommunityDialogId(MessagesController.CommunityPeerDialog peer) {
+        if (peer == null) {
+            return 0;
+        }
+        if (peer.dialog != null) {
+            return peer.dialog.id;
+        }
+        if (peer.chat != null) {
+            return -peer.chat.id;
+        }
+        return peer.user != null ? peer.user.id : 0;
+    }
+
+    private void collectCommunityDialogIds(ArrayList<MessagesController.CommunityPeerDialog> peers, ArrayList<Long> dialogIds) {
+        for (MessagesController.CommunityPeerDialog peer : peers) {
+            long dialogId = getCommunityDialogId(peer);
+            if (dialogId != 0) {
+                dialogIds.add(dialogId);
             }
         }
     }
@@ -1650,9 +1716,6 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             updateItemListForCommunity();
             return;
         }
-
-        itemInternals.clear();
-        updateHasHints();
 
         MessagesController messagesController = MessagesController.getInstance(currentAccount);
 
@@ -1667,18 +1730,52 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             if (array == null) array = new ArrayList<>();
         }
 
-        // Hidden chats are filtered from every normal folder and shown only
-        // in the dedicated native Telegram-style list.
-        if (!isOnlySelect && array != null) {
-            HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+        // Prepare the keyed privacy tokens off the UI thread before filtering.
+        // This also applies to only-select lists (for example, folder pickers),
+        // so hidden conversations cannot be added to folders through a picker.
+        HiddenChatsVault hiddenVault = null;
+        if (array != null) {
+            hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+            ArrayList<Long> dialogIds = new ArrayList<>(array.size());
+            if (hiddenChatsMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
+                if (activeVault != null && activeVault.isUnlocked()) {
+                    dialogIds.addAll(activeVault.getHiddenDialogIds());
+                }
+            } else {
+                for (TLRPC.Dialog dialog : array) {
+                    if (dialog != null) {
+                        dialogIds.add(dialog.id);
+                    }
+                }
+                if (communityId == 0 && folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect) {
+                    for (TLRPC.TL_topPeer peer : messagesController.hintDialogs) {
+                        long hintDialogId = getTopPeerDialogId(peer);
+                        if (hintDialogId != 0) {
+                            dialogIds.add(hintDialogId);
+                        }
+                    }
+                }
+            }
+            if (!hiddenVault.prepareFilterTokens(dialogIds, () -> updateList(null))) {
+                return;
+            }
+        }
+
+        itemInternals.clear();
+        updateHasHints();
+
+        // Hidden chats are filtered from every normal folder and selection
+        // picker, and are shown only in the dedicated hidden-chat list.
+        if (array != null) {
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
                 if (dialog == null) continue;
                 boolean hidden;
                 if (hiddenChatsMode) {
-                    HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
-                    hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialog.id);
+                    HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
+                    hidden = activeVault == null || !activeVault.isUnlocked() || activeVault.isDialogHidden(dialog.id);
                 } else {
                     hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
                 }
@@ -1810,10 +1907,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             itemInternals.add(new ItemInternal(VIEW_TYPE_LAST_EMPTY));
             stopUpdate = true;
         } else if (hasHints) {
-            int count = MessagesController.getInstance(currentAccount).hintDialogs.size();
+            int count = visibleHintDialogs.size();
             itemInternals.add(new ItemInternal(VIEW_TYPE_RECENTLY_VIEWED));
             for (int k = 0; k < count; k++) {
-                itemInternals.add(new ItemInternal(VIEW_TYPE_ME_URL, MessagesController.getInstance(currentAccount).hintDialogs.get(k)));
+                itemInternals.add(new ItemInternal(VIEW_TYPE_ME_URL, visibleHintDialogs.get(k)));
             }
             itemInternals.add(new ItemInternal(VIEW_TYPE_DIVIDER));
         } else if (dialogsType == DialogsActivity.DIALOGS_TYPE_IMPORT_HISTORY_GROUPS || dialogsType == DialogsActivity.DIALOGS_TYPE_IMPORT_HISTORY) {

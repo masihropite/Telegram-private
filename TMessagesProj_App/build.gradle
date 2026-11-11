@@ -85,7 +85,7 @@ android {
             debuggable false
             jniDebuggable false
             signingConfig signingConfigs.release
-            applicationIdSuffix ".web"
+            applicationIdSuffix ".telegramz"
             minifyEnabled true
             shrinkResources true
             multiDexEnabled true

@@ -8,6 +8,7 @@
 package org.telegram.messenger;
 
 import android.content.Context;
+import android.os.Looper;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
@@ -27,10 +28,14 @@ import javax.crypto.SecretKey;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKeyFactory;
@@ -46,11 +51,16 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class HiddenChatsVault {
 
-    private static final String PREFS_NAME = "hidden_chats_vault_v1";
+    private static final String PREFS_NAME = "hidden_chats_vault_v2";
+    private static final String LEGACY_PREFS_NAME = "hidden_chats_vault_v1";
     private static final String KEY_PAYLOAD = "encrypted_payload";
     private static final String KEY_FILTER_TOKENS = "hidden_dialog_filter_tokens";
+    private static final String KEY_FAILED_ATTEMPTS = "failed_unlock_attempts";
+    private static final String KEY_NEXT_UNLOCK_TIME = "next_unlock_allowed_at";
+    private static final String KEY_OWNER_USER_ID = "owner_user_id";
     private static final String KEYSTORE_ALIAS = "telegram_hidden_chats_filter_hmac_v1";
-    private static final int FORMAT_VERSION = 1;
+    private static final int LEGACY_FORMAT_VERSION = 1;
+    private static final int FORMAT_VERSION = 2;
     private static final int SALT_BYTES = 16;
     private static final int IV_BYTES = 12;
     private static final int KEY_BITS = 256;
@@ -60,10 +70,20 @@ public final class HiddenChatsVault {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
-    private static volatile HiddenChatsVault activeVault;
+    private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
+    private static final String FILTER_TOKEN_FAILED = "__FILTER_TOKEN_FAILED__";
+    private static final ConcurrentHashMap<Long, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<Long, String>();
+    private static final Set<Long> FILTER_TOKEN_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
+    private static final ExecutorService FILTER_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "HiddenChatsFilter");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final SharedPreferences preferences;
+    private final int account;
     private final Set<Long> hiddenDialogIds = new LinkedHashSet<Long>();
+    private volatile Set<String> cachedFilterTokens;
 
     private byte[] salt;
     private byte[] unlockedKey;
@@ -76,22 +96,55 @@ public final class HiddenChatsVault {
         if (context == null) {
             throw new IllegalArgumentException("Context must not be null");
         }
-        preferences = context.getApplicationContext().getSharedPreferences(
-                PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+        this.account = account;
+        Context appContext = context.getApplicationContext();
+        long userId = UserConfig.getInstance(account).getClientUserId();
+        String scopedPrefsName = userId != 0
+                ? PREFS_NAME + "_user_" + userId
+                : PREFS_NAME + "_account_" + account;
+        SharedPreferences scopedPreferences = appContext.getSharedPreferences(scopedPrefsName, Context.MODE_PRIVATE);
+
+        // One-time migration from the older account-slot preferences. Record
+        // the owner in the legacy file so a different account later reusing
+        // the same slot cannot inherit the previous account's hidden list.
+        if (userId != 0 && !scopedPreferences.contains(KEY_PAYLOAD)) {
+            SharedPreferences legacyPreferences = appContext.getSharedPreferences(
+                    LEGACY_PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+            long legacyOwner = legacyPreferences.getLong(KEY_OWNER_USER_ID, 0L);
+            if (legacyPreferences.contains(KEY_PAYLOAD) && (legacyOwner == 0L || legacyOwner == userId)) {
+                SharedPreferences.Editor editor = scopedPreferences.edit();
+                editor.putString(KEY_PAYLOAD, legacyPreferences.getString(KEY_PAYLOAD, ""));
+                Set<String> legacyTokens = legacyPreferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                editor.putStringSet(KEY_FILTER_TOKENS, legacyTokens == null
+                        ? Collections.<String>emptySet() : new LinkedHashSet<String>(legacyTokens));
+                editor.putInt(KEY_FAILED_ATTEMPTS, legacyPreferences.getInt(KEY_FAILED_ATTEMPTS, 0));
+                editor.putLong(KEY_NEXT_UNLOCK_TIME, legacyPreferences.getLong(KEY_NEXT_UNLOCK_TIME, 0L));
+                editor.putLong(KEY_OWNER_USER_ID, userId);
+                if (editor.commit()) {
+                    legacyPreferences.edit().putLong(KEY_OWNER_USER_ID, userId).commit();
+                }
+            }
+        }
+        preferences = scopedPreferences;
     }
 
     public void registerAsActiveVault() {
-        activeVault = this;
+        ACTIVE_VAULTS.put(account, this);
     }
 
     public static HiddenChatsVault getActiveVault() {
-        return activeVault;
+        return getActiveVault(UserConfig.selectedAccount);
+    }
+
+    public static HiddenChatsVault getActiveVault(int account) {
+        return ACTIVE_VAULTS.get(account);
     }
 
     public static void lockActiveVault() {
-        HiddenChatsVault current = activeVault;
-        if (current != null) {
-            current.lock();
+        for (HiddenChatsVault vault : ACTIVE_VAULTS.values()) {
+            if (vault != null) {
+                vault.lock();
+            }
         }
     }
 
@@ -114,7 +167,12 @@ public final class HiddenChatsVault {
         validatePassword(password);
         salt = new byte[SALT_BYTES];
         RANDOM.nextBytes(salt);
-        unlockedKey = deriveKey(password, salt);
+        byte[] pinKey = deriveKey(password, salt);
+        try {
+            unlockedKey = deriveVaultKey(pinKey);
+        } finally {
+            clear(pinKey);
+        }
         hiddenDialogIds.clear();
         persist();
     }
@@ -126,6 +184,12 @@ public final class HiddenChatsVault {
     public synchronized void unlock(char[] password) throws GeneralSecurityException {
         if (!isConfigured()) {
             throw new IllegalStateException("Hidden chats vault has not been configured");
+        }
+        long now = System.currentTimeMillis();
+        long nextAllowedAt = preferences.getLong(KEY_NEXT_UNLOCK_TIME, 0L);
+        if (now < nextAllowedAt) {
+            long remainingSeconds = Math.max(1L, (nextAllowedAt - now + 999L) / 1000L);
+            throw new GeneralSecurityException("Too many incorrect attempts. Try again in " + remainingSeconds + " seconds.");
         }
         validatePassword(password);
 
@@ -142,7 +206,7 @@ public final class HiddenChatsVault {
 
         ByteBuffer buffer = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN);
         int version = buffer.get() & 0xff;
-        if (version != FORMAT_VERSION) {
+        if (version != LEGACY_FORMAT_VERSION && version != FORMAT_VERSION) {
             throw new GeneralSecurityException("Unsupported hidden chats data version");
         }
 
@@ -153,23 +217,76 @@ public final class HiddenChatsVault {
         byte[] ciphertext = new byte[buffer.remaining()];
         buffer.get(ciphertext);
 
-        byte[] candidateKey = deriveKey(password, storedSalt);
+        byte[] pinKey = deriveKey(password, storedSalt);
+        byte[] candidateKey = null;
+        byte[] finalKey = null;
         try {
-            byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext);
+            // Version 1 used the PIN-derived key directly. Version 2 combines
+            // it with a non-exportable Android Keystore HMAC key, preventing
+            // offline PIN guessing from an extracted preferences file.
+            candidateKey = version == LEGACY_FORMAT_VERSION ? pinKey : deriveVaultKey(pinKey);
+            byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext, version);
             Set<Long> restored = deserializeDialogIds(plaintext);
+            finalKey = version == LEGACY_FORMAT_VERSION ? deriveVaultKey(pinKey) : candidateKey;
+
             clear(unlockedKey);
             clear(salt);
-            unlockedKey = candidateKey;
+            unlockedKey = finalKey;
+            finalKey = null;
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
+
+            // Migrate legacy data without making a successful unlock fail if
+            // the migration write is interrupted. The legacy payload remains
+            // readable and will be migrated on a later successful unlock.
+            if (version == LEGACY_FORMAT_VERSION) {
+                try {
+                    persist();
+                    clearLegacyPreferences();
+                } catch (GeneralSecurityException e) {
+                    FileLog.e(e);
+                }
+            }
+            preferences.edit().remove(KEY_FAILED_ATTEMPTS).remove(KEY_NEXT_UNLOCK_TIME).apply();
         } catch (GeneralSecurityException e) {
-            clear(candidateKey);
+            recordFailedUnlockAttempt();
             throw new GeneralSecurityException("Incorrect password or damaged hidden chats data", e);
         } catch (RuntimeException e) {
-            clear(candidateKey);
+            recordFailedUnlockAttempt();
             throw new GeneralSecurityException("Hidden chats data is invalid", e);
+        } finally {
+            clear(pinKey);
+            if (candidateKey != null && candidateKey != unlockedKey) {
+                clear(candidateKey);
+            }
+            if (finalKey != null && finalKey != unlockedKey && finalKey != candidateKey) {
+                clear(finalKey);
+            }
         }
+    }
+
+    private void clearLegacyPreferences() {
+        long userId = UserConfig.getInstance(account).getClientUserId();
+        SharedPreferences legacyPreferences = ApplicationLoader.applicationContext.getSharedPreferences(
+                LEGACY_PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+        if (userId != 0 && legacyPreferences.getLong(KEY_OWNER_USER_ID, 0L) == userId) {
+            legacyPreferences.edit()
+                    .remove(KEY_PAYLOAD)
+                    .remove(KEY_FILTER_TOKENS)
+                    .remove(KEY_FAILED_ATTEMPTS)
+                    .remove(KEY_NEXT_UNLOCK_TIME)
+                    .commit();
+        }
+    }
+
+    private void recordFailedUnlockAttempt() {
+        int failures = Math.min(20, preferences.getInt(KEY_FAILED_ATTEMPTS, 0) + 1);
+        long delay = Math.min(15L * 60L * 1000L, 1000L << Math.min(failures - 1, 10));
+        preferences.edit()
+                .putInt(KEY_FAILED_ATTEMPTS, failures)
+                .putLong(KEY_NEXT_UNLOCK_TIME, System.currentTimeMillis() + delay)
+                .apply();
     }
 
     /** Locks the vault and clears decrypted IDs and key material from memory. */
@@ -192,18 +309,76 @@ public final class HiddenChatsVault {
     }
 
     /**
-     * Checks hidden state without unlocking. Only one-way HMAC tokens are
-     * persisted, allowing the main chat list to remain filtered while locked.
+     * Precomputes dialog filter tokens away from the UI thread. The main dialog
+     * list must never invoke Android Keystore operations while drawing/updating.
+     *
+     * Returns true only when every supplied dialog ID has a cached token.
+     * Missing tokens are treated as hidden until the background preparation
+     * completes, so a Keystore delay cannot briefly reveal a hidden dialog.
      */
-    public synchronized boolean isDialogHiddenForFiltering(long dialogId) {
-        try {
-            String token = dialogToken(dialogId);
-            Set<String> tokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-            return tokens != null && tokens.contains(token);
-        } catch (Exception e) {
-            // Fail closed: a keystore failure must not reveal hidden chats.
+    public boolean prepareFilterTokens(Collection<Long> dialogIds, Runnable callback) {
+        if (dialogIds == null || dialogIds.isEmpty()) {
             return true;
         }
+        ArrayList<Long> missing = new ArrayList<Long>();
+        boolean ready = true;
+        for (Long id : dialogIds) {
+            if (id == null || id.longValue() == 0) {
+                continue;
+            }
+            if (!FILTER_TOKEN_CACHE.containsKey(id)) {
+                ready = false;
+                if (FILTER_TOKEN_PENDING.add(id)) {
+                    missing.add(id);
+                }
+            }
+        }
+        if (ready) {
+            return true;
+        }
+        FILTER_EXECUTOR.execute(() -> {
+            for (Long id : missing) {
+                try {
+                    FILTER_TOKEN_CACHE.put(id, dialogToken(id.longValue()));
+                } catch (Exception e) {
+                    // Fail closed: do not show a dialog if its privacy token
+                    // cannot be verified.
+                    FILTER_TOKEN_CACHE.put(id, FILTER_TOKEN_FAILED);
+                    FileLog.e(e);
+                } finally {
+                    FILTER_TOKEN_PENDING.remove(id);
+                }
+            }
+            if (callback != null) {
+                AndroidUtilities.runOnUIThread(callback);
+            }
+        });
+        return false;
+    }
+
+    public boolean isDialogHiddenForFiltering(long dialogId) {
+        String token = FILTER_TOKEN_CACHE.get(dialogId);
+        if (token == null && Looper.myLooper() != Looper.getMainLooper()) {
+            // Search results are sometimes filtered on Telegram's search queue.
+            // It is safe to do the first token calculation there, never on main.
+            try {
+                token = dialogToken(dialogId);
+                FILTER_TOKEN_CACHE.put(dialogId, token);
+            } catch (Exception e) {
+                FILTER_TOKEN_CACHE.put(dialogId, FILTER_TOKEN_FAILED);
+                FileLog.e(e);
+            }
+        }
+        if (token == null || FILTER_TOKEN_FAILED.equals(token)) {
+            return true;
+        }
+        Set<String> tokens = cachedFilterTokens;
+        if (tokens == null) {
+            Set<String> stored = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+            tokens = stored == null ? Collections.<String>emptySet() : new LinkedHashSet<String>(stored);
+            cachedFilterTokens = tokens;
+        }
+        return tokens.contains(token);
     }
 
     public synchronized void hideDialog(long dialogId) throws GeneralSecurityException {
@@ -212,14 +387,24 @@ public final class HiddenChatsVault {
             throw new IllegalArgumentException("Dialog ID must not be zero");
         }
         if (hiddenDialogIds.add(dialogId)) {
-            persist();
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.remove(dialogId);
+                throw e;
+            }
         }
     }
 
     public synchronized void unhideDialog(long dialogId) throws GeneralSecurityException {
         requireUnlocked();
         if (hiddenDialogIds.remove(dialogId)) {
-            persist();
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.add(dialogId);
+                throw e;
+            }
         }
     }
 
@@ -239,18 +424,38 @@ public final class HiddenChatsVault {
 
         Set<String> filterTokens = new LinkedHashSet<String>();
         for (Long id : hiddenDialogIds) {
-            filterTokens.add(dialogToken(id.longValue()));
+            String token = FILTER_TOKEN_CACHE.get(id);
+            if (token == null || FILTER_TOKEN_FAILED.equals(token)) {
+                token = dialogToken(id.longValue());
+                FILTER_TOKEN_CACHE.put(id, token);
+            }
+            filterTokens.add(token);
         }
         boolean saved = preferences.edit()
                 .putString(KEY_PAYLOAD, Base64.encodeToString(payload.array(), Base64.NO_WRAP))
                 .putStringSet(KEY_FILTER_TOKENS, filterTokens)
+                .putLong(KEY_OWNER_USER_ID, UserConfig.getInstance(account).getClientUserId())
                 .commit();
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
         }
+        cachedFilterTokens = new LinkedHashSet<String>(filterTokens);
     }
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(getFilterKey());
+        byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
+        return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
+    }
+
+    private static byte[] deriveVaultKey(byte[] pinKey) throws GeneralSecurityException {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(getFilterKey());
+        return mac.doFinal(pinKey);
+    }
+
+    private static SecretKey getFilterKey() throws GeneralSecurityException {
         try {
             SecretKey key = cachedFilterKey;
             if (key == null) {
@@ -273,10 +478,7 @@ public final class HiddenChatsVault {
                     }
                 }
             }
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(key);
-            byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
-            return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
+            return key;
         } catch (GeneralSecurityException e) {
             throw e;
         } catch (Exception e) {
@@ -297,9 +499,14 @@ public final class HiddenChatsVault {
 
     private static byte[] crypt(int mode, byte[] key, byte[] iv, byte[] input)
             throws GeneralSecurityException {
+        return crypt(mode, key, iv, input, FORMAT_VERSION);
+    }
+
+    private static byte[] crypt(int mode, byte[] key, byte[] iv, byte[] input, int formatVersion)
+            throws GeneralSecurityException {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(mode, new SecretKeySpec(key, "AES"), new GCMParameterSpec(GCM_TAG_BITS, iv));
-        cipher.updateAAD(new byte[] { (byte) FORMAT_VERSION });
+        cipher.updateAAD(new byte[] { (byte) formatVersion });
         return cipher.doFinal(input);
     }
 
