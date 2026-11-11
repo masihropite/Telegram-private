@@ -7012,6 +7012,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     if (alternateSize == null || alternateSize.location == null) {
                         return;
                     }
+                    carouselImageLocation = ImageLocation.getForPhoto(alternateSize, alternatePhoto);
                     fileLocation = alternateSize.location;
                     photo = alternatePhoto;
                 } else {
