@@ -1734,19 +1734,26 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         // This also applies to only-select lists (for example, folder pickers),
         // so hidden conversations cannot be added to folders through a picker.
         HiddenChatsVault hiddenVault = null;
-        if (!hiddenChatsMode && array != null) {
+        if (array != null) {
             hiddenVault = new HiddenChatsVault(mContext, currentAccount);
             ArrayList<Long> dialogIds = new ArrayList<>(array.size());
-            for (TLRPC.Dialog dialog : array) {
-                if (dialog != null) {
-                    dialogIds.add(dialog.id);
+            if (hiddenChatsMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
+                if (activeVault != null && activeVault.isUnlocked()) {
+                    dialogIds.addAll(activeVault.getHiddenDialogIds());
                 }
-            }
-            if (communityId == 0 && folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect) {
-                for (TLRPC.TL_topPeer peer : messagesController.hintDialogs) {
-                    long hintDialogId = getTopPeerDialogId(peer);
-                    if (hintDialogId != 0) {
-                        dialogIds.add(hintDialogId);
+            } else {
+                for (TLRPC.Dialog dialog : array) {
+                    if (dialog != null) {
+                        dialogIds.add(dialog.id);
+                    }
+                }
+                if (communityId == 0 && folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect) {
+                    for (TLRPC.TL_topPeer peer : messagesController.hintDialogs) {
+                        long hintDialogId = getTopPeerDialogId(peer);
+                        if (hintDialogId != 0) {
+                            dialogIds.add(hintDialogId);
+                        }
                     }
                 }
             }
