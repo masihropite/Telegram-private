@@ -281,8 +281,10 @@ public final class HiddenChatsVault {
                             hidden = true;
                         }
                     }
-                    if (expectedGeneration.get() == generation) {
-                        FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                    synchronized (FILTER_CACHE_LOCK) {
+                        if (expectedGeneration.get() == generation) {
+                            FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                        }
                     }
                 }
             } finally {
@@ -316,12 +318,14 @@ public final class HiddenChatsVault {
     }
 
     private void invalidateFilterCache() {
-        AtomicInteger generation = FILTER_CACHE_GENERATIONS.get(account);
-        if (generation != null) generation.incrementAndGet();
-        String prefix = account + ":";
-        for (String key : FILTER_CACHE.keySet()) {
-            if (key.startsWith(prefix)) {
-                FILTER_CACHE.remove(key);
+        synchronized (FILTER_CACHE_LOCK) {
+            AtomicInteger generation = FILTER_CACHE_GENERATIONS.get(account);
+            if (generation != null) generation.incrementAndGet();
+            String prefix = account + ":";
+            for (String key : FILTER_CACHE.keySet()) {
+                if (key.startsWith(prefix)) {
+                    FILTER_CACHE.remove(key);
+                }
             }
         }
     }
