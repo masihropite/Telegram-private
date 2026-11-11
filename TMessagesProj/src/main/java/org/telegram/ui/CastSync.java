@@ -155,7 +155,9 @@ public class CastSync {
             if (castContext == null) return;
             castContext.getSessionManager().endCurrentSession(true);
         } catch (Exception e) {
-            FileLog.e(e);
+            if (!isCastModuleUnavailable(e)) {
+                FileLog.e(e);
+            }
         }
     }
 
