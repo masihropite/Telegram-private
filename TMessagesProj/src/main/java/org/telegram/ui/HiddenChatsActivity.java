@@ -14,6 +14,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -22,6 +23,7 @@ import android.widget.Toast;
 
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.HiddenChatsVault;
+import org.telegram.messenger.LocalProfilePhotoVisibility;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserObject;
@@ -67,6 +69,8 @@ public class HiddenChatsActivity extends BaseFragment {
         description.setTextSize(14);
         content.addView(description, new LinearLayout.LayoutParams(-1, -2));
 
+        addLocalProfilePhotoControls(context);
+
         Button unlock = new Button(context);
         unlock.setText(vault.isConfigured() ? "باز کردن گفتگوهای مخفی" : "تنظیم رمز عبور");
         unlock.setOnClickListener(v -> requestPassword());
@@ -97,7 +101,47 @@ public class HiddenChatsActivity extends BaseFragment {
         return (int) (value * context.getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    private void addLocalProfilePhotoControls(Context context) {
+        TextView header = new TextView(context);
+        header.setText("مخفی‌سازی عکس پروفایل فقط برای خودم");
+        header.setTextSize(16);
+        header.setTypeface(null, Typeface.BOLD);
+        header.setPadding(0, dp(context, 20), 0, dp(context, 4));
+        content.addView(header, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView note = new TextView(context);
+        note.setText("این تغییر فقط در TelegramZ روی همین دستگاه اعمال می‌شود و عکس مخاطبین را تغییر نمی‌دهد. برای باقی‌ماندن حداقل یک عکس، نمی‌توان هر دو گزینه را هم‌زمان فعال کرد.");
+        note.setTextSize(13);
+        content.addView(note, new LinearLayout.LayoutParams(-1, -2));
+
+        CheckBox privatePhoto = new CheckBox(context);
+        privatePhoto.setText("مخفی‌کردن عکس خصوصی (برای مخاطبین مجاز)");
+        privatePhoto.setChecked(LocalProfilePhotoVisibility.isPrivateHidden(currentAccount));
+        privatePhoto.setOnCheckedChangeListener((button, checked) -> {
+            if (!LocalProfilePhotoVisibility.setPrivateHidden(currentAccount, checked)) {
+                button.setChecked(false);
+                Toast.makeText(getParentActivity(), "برای باقی‌ماندن یک عکس، ابتدا گزینه عکس عمومی را خاموش کنید.", Toast.LENGTH_LONG).show();
+            }
+        });
+        content.addView(privatePhoto, new LinearLayout.LayoutParams(-1, -2));
+
+        CheckBox publicPhoto = new CheckBox(context);
+        publicPhoto.setText("مخفی‌کردن عکس عمومی (برای سایر افراد)");
+        publicPhoto.setChecked(LocalProfilePhotoVisibility.isPublicHidden(currentAccount));
+        publicPhoto.setOnCheckedChangeListener((button, checked) -> {
+            if (!LocalProfilePhotoVisibility.setPublicHidden(currentAccount, checked)) {
+                button.setChecked(false);
+                Toast.makeText(getParentActivity(), "برای باقی‌ماندن یک عکس، ابتدا گزینه عکس خصوصی را خاموش کنید.", Toast.LENGTH_LONG).show();
+            }
+        });
+        content.addView(publicPhoto, new LinearLayout.LayoutParams(-1, -2));
+    }
+
     private void requestPassword() {
+        requestPassword(this::openHiddenDialogs);
+    }
+
+    private void requestPassword(Runnable onUnlocked) {
         if (getParentActivity() == null) return;
         final EditText password = new EditText(getParentActivity());
         password.setSingleLine(true);
@@ -117,9 +161,11 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
-                    openHiddenDialogs();
+                    if (onUnlocked != null) {
+                        onUnlocked.run();
+                    }
                 } else {
-                    requestPasswordConfirmation(entered.clone());
+                    requestPasswordConfirmation(entered.clone(), onUnlocked);
                     dialog.dismiss();
                 }
             } catch (Exception e) {
@@ -132,7 +178,7 @@ public class HiddenChatsActivity extends BaseFragment {
         dialog.show();
     }
 
-    private void requestPasswordConfirmation(char[] first) {
+    private void requestPasswordConfirmation(char[] first, Runnable onUnlocked) {
         final EditText confirmation = new EditText(getParentActivity());
         confirmation.setSingleLine(true);
         confirmation.setKeyListener(DigitsKeyListener.getInstance("0123456789"));
@@ -151,7 +197,9 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
-                        openHiddenDialogs();
+                        if (onUnlocked != null) {
+                            onUnlocked.run();
+                        }
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
                     } finally {
@@ -209,16 +257,28 @@ public class HiddenChatsActivity extends BaseFragment {
             Button restore = new Button(getParentActivity());
             restore.setText("نمایش دوباره");
             restore.setOnClickListener(v -> {
-                try {
-                    vault.unhideDialog(dialogId);
-                    org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
-                    refreshRows();
-                } catch (GeneralSecurityException e) {
-                    Toast.makeText(getParentActivity(), "نمایش دوباره گفتگو انجام نشد", Toast.LENGTH_LONG).show();
+                if (!vault.isUnlocked()) {
+                    requestPassword(() -> restoreDialog(dialogId));
+                    return;
                 }
+                restoreDialog(dialogId);
             });
             line.addView(restore, new LinearLayout.LayoutParams(-2, -2));
             rows.addView(line, new LinearLayout.LayoutParams(-1, -2));
+        }
+    }
+
+    private void restoreDialog(long dialogId) {
+        try {
+            vault.unhideDialog(dialogId);
+            org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
+            refreshRows();
+        } catch (IllegalStateException e) {
+            // The app may have been backgrounded between drawing the row and
+            // the tap. Re-authenticate instead of crashing the main thread.
+            requestPassword(() -> restoreDialog(dialogId));
+        } catch (GeneralSecurityException e) {
+            Toast.makeText(getParentActivity(), "نمایش دوباره گفتگو انجام نشد", Toast.LENGTH_LONG).show();
         }
     }
 
