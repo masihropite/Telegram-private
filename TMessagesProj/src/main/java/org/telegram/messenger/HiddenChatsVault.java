@@ -35,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKeyFactory;
@@ -67,6 +68,7 @@ public final class HiddenChatsVault {
     private static volatile HiddenChatsVault activeVault;
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
     private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private static final ConcurrentHashMap<Integer, AtomicInteger> FILTER_CACHE_GENERATIONS = new ConcurrentHashMap<Integer, AtomicInteger>();
 
     private final SharedPreferences preferences;
     private final int account;
@@ -230,6 +232,14 @@ public final class HiddenChatsVault {
             }
             return;
         }
+        AtomicInteger generationCounter = FILTER_CACHE_GENERATIONS.get(account);
+        if (generationCounter == null) {
+            AtomicInteger created = new AtomicInteger();
+            AtomicInteger existing = FILTER_CACHE_GENERATIONS.putIfAbsent(account, created);
+            generationCounter = existing == null ? created : existing;
+        }
+        final AtomicInteger expectedGeneration = generationCounter;
+        final int generation = expectedGeneration.get();
         Utilities.globalQueue.postRunnable(() -> {
             try {
                 Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
@@ -244,7 +254,9 @@ public final class HiddenChatsVault {
                         // Fail closed on cryptographic errors.
                         hidden = true;
                     }
-                    FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                    if (expectedGeneration.get() == generation) {
+                        FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                    }
                 }
             } finally {
                 for (Long id : pendingIds) {
@@ -267,6 +279,8 @@ public final class HiddenChatsVault {
     }
 
     private void invalidateFilterCache() {
+        AtomicInteger generation = FILTER_CACHE_GENERATIONS.get(account);
+        if (generation != null) generation.incrementAndGet();
         String prefix = account + ":";
         for (String key : FILTER_CACHE.keySet()) {
             if (key.startsWith(prefix)) {
