@@ -168,6 +168,7 @@ public final class HiddenChatsVault {
         buffer.get(ciphertext);
 
         byte[] candidateKey = deriveKey(password, storedSalt);
+        boolean needsFilterIndexMigration = false;
         try {
             byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext);
             Set<Long> restored = deserializeDialogIds(plaintext);
@@ -177,14 +178,10 @@ public final class HiddenChatsVault {
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
-            boolean needsFilterIndexMigration;
             try {
                 needsFilterIndexMigration = preferences.getStringSet(KEY_FILTER_TOKENS, null) == null;
             } catch (Exception e) {
                 needsFilterIndexMigration = true;
-            }
-            if (needsFilterIndexMigration) {
-                persist();
             }
         } catch (GeneralSecurityException e) {
             clear(candidateKey);
@@ -192,6 +189,13 @@ public final class HiddenChatsVault {
         } catch (RuntimeException e) {
             clear(candidateKey);
             throw new GeneralSecurityException("Hidden chats data is invalid", e);
+        }
+        if (needsFilterIndexMigration) {
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                FileLog.e(e);
+            }
         }
     }
 
