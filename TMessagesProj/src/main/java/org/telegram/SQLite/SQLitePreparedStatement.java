@@ -21,6 +21,7 @@ public class SQLitePreparedStatement {
 
     private boolean isFinalized = false;
     private long sqliteStatementHandle;
+    private final SQLiteDatabase database;
 
     private long startTime;
     private String query;
@@ -30,7 +31,9 @@ public class SQLitePreparedStatement {
     }
 
     public SQLitePreparedStatement(SQLiteDatabase db, String sql) throws SQLiteException {
+        database = db;
         sqliteStatementHandle = prepare(db.getSQLiteHandle(), sql);
+        database.registerStatement(this);
         if (BuildVars.LOGS_ENABLED) {
             query = sql;
             startTime = SystemClock.elapsedRealtime();
@@ -116,6 +119,8 @@ public class SQLitePreparedStatement {
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.e(e.getMessage(), e);
             }
+        } finally {
+            database.unregisterStatement(this);
         }
     }
 
