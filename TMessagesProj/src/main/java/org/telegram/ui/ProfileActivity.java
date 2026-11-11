@@ -801,7 +801,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (userId != 0) {
                 TLRPC.User user = getMessagesController().getUser(userId);
                 if (user != null && user.photo != null && user.photo.photo_big != null) {
-                    photoBig = user.photo.photo_big;
+                    boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                            && (user.photo.personal
+                            ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                            : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount));
+                    if (!hideCurrentPhoto) {
+                        photoBig = user.photo.photo_big;
+                    }
                 }
             } else if (chatId != 0) {
                 TLRPC.Chat chat = getMessagesController().getChat(chatId);
