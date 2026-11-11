@@ -168,6 +168,7 @@ public final class HiddenChatsVault {
         buffer.get(ciphertext);
 
         byte[] candidateKey = deriveKey(password, storedSalt);
+        boolean needsFilterIndexMigration = false;
         try {
             byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext);
             Set<Long> restored = deserializeDialogIds(plaintext);
@@ -177,12 +178,24 @@ public final class HiddenChatsVault {
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
+            try {
+                needsFilterIndexMigration = preferences.getStringSet(KEY_FILTER_TOKENS, null) == null;
+            } catch (Exception e) {
+                needsFilterIndexMigration = true;
+            }
         } catch (GeneralSecurityException e) {
             clear(candidateKey);
             throw new GeneralSecurityException("Incorrect password or damaged hidden chats data", e);
         } catch (RuntimeException e) {
             clear(candidateKey);
             throw new GeneralSecurityException("Hidden chats data is invalid", e);
+        }
+        if (needsFilterIndexMigration) {
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                FileLog.e(e);
+            }
         }
     }
 
@@ -263,16 +276,26 @@ public final class HiddenChatsVault {
             try {
                 Set<String> tokens;
                 try {
-                    Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-                    tokens = storedTokens == null
-                            ? Collections.<String>emptySet()
-                            : new LinkedHashSet<String>(storedTokens);
+                    boolean configured = preferences.contains(KEY_PAYLOAD);
+                    boolean hasFilterTokens = preferences.contains(KEY_FILTER_TOKENS);
+                    if (configured && !hasFilterTokens) {
+                        // Older or damaged vault data must fail closed until it is unlocked and migrated.
+                        tokens = null;
+                    } else {
+                        Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                        tokens = storedTokens == null
+                                ? Collections.<String>emptySet()
+                                : new LinkedHashSet<String>(storedTokens);
+                    }
                 } catch (Exception e) {
                     tokens = null;
                 }
                 for (Long id : pendingIds) {
                     boolean hidden = tokens == null;
-                    if (tokens != null) {
+                    if (tokens != null && tokens.isEmpty()) {
+                        // No hidden dialogs means no Keystore/HMAC work is needed.
+                        hidden = false;
+                    } else if (tokens != null) {
                         try {
                             String token = dialogToken(id.longValue());
                             FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
