@@ -67,6 +67,7 @@ public final class HiddenChatsVault {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
+    private static final Object FILTER_CACHE_LOCK = new Object();
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
     private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
     private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
@@ -218,34 +219,33 @@ public final class HiddenChatsVault {
         }
         final ArrayList<Long> pendingIds = new ArrayList<>();
         final ArrayList<String> missingKeys = new ArrayList<>();
-        final Set<String> seenKeys = new LinkedHashSet<>();
-        for (Long id : dialogIds) {
-            if (id == null) continue;
-            String key = filterCacheKey(id.longValue());
-            if (!seenKeys.add(key) || FILTER_CACHE.containsKey(key)) continue;
-            missingKeys.add(key);
-            if (FILTER_CACHE_PENDING.add(key)) {
-                pendingIds.add(id);
+        synchronized (FILTER_CACHE_LOCK) {
+            final Set<String> seenKeys = new LinkedHashSet<>();
+            for (Long id : dialogIds) {
+                if (id == null) continue;
+                String key = filterCacheKey(id.longValue());
+                if (!seenKeys.add(key) || FILTER_CACHE.containsKey(key)) continue;
+                missingKeys.add(key);
+                if (FILTER_CACHE_PENDING.add(key)) {
+                    pendingIds.add(id);
+                }
             }
-        }
-        if (missingKeys.isEmpty()) {
-            return;
-        }
-        if (onReady != null) {
-            final AtomicInteger remaining = new AtomicInteger(missingKeys.size());
-            Runnable readyCallback = () -> {
-                if (remaining.decrementAndGet() == 0) {
-                    AndroidUtilities.runOnUIThread(onReady);
+            if (onReady != null && !missingKeys.isEmpty()) {
+                final AtomicInteger remaining = new AtomicInteger(missingKeys.size());
+                Runnable readyCallback = () -> {
+                    if (remaining.decrementAndGet() == 0) {
+                        AndroidUtilities.runOnUIThread(onReady);
+                    }
+                };
+                for (String key : missingKeys) {
+                    CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.get(key);
+                    if (waiters == null) {
+                        CopyOnWriteArrayList<Runnable> created = new CopyOnWriteArrayList<>();
+                        CopyOnWriteArrayList<Runnable> existing = FILTER_CACHE_WAITERS.putIfAbsent(key, created);
+                        waiters = existing == null ? created : existing;
+                    }
+                    waiters.add(readyCallback);
                 }
-            };
-            for (String key : missingKeys) {
-                CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.get(key);
-                if (waiters == null) {
-                    CopyOnWriteArrayList<Runnable> created = new CopyOnWriteArrayList<>();
-                    CopyOnWriteArrayList<Runnable> existing = FILTER_CACHE_WAITERS.putIfAbsent(key, created);
-                    waiters = existing == null ? created : existing;
-                }
-                waiters.add(readyCallback);
             }
         }
         if (pendingIds.isEmpty()) {
@@ -271,21 +271,11 @@ public final class HiddenChatsVault {
                     tokens = null;
                 }
                 for (Long id : pendingIds) {
-                    boolean hidden;
-                    if (tokens == null) {
-                        // A preference read failure must never reveal hidden chats.
-                        hidden = true;
-                    } else if (tokens.isEmpty()) {
-                        // No hidden IDs means no Keystore/HMAC work is needed.
-                        hidden = false;
-                    } else {
+                    boolean hidden = tokens == null;
+                    if (tokens != null) {
                         try {
-                            String key = filterCacheKey(id.longValue());
-                            String token = FILTER_TOKEN_CACHE.get(key);
-                            if (token == null) {
-                                token = dialogToken(id.longValue());
-                                FILTER_TOKEN_CACHE.put(key, token);
-                            }
+                            String token = dialogToken(id.longValue());
+                            FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
                             hidden = tokens.contains(token);
                         } catch (Exception e) {
                             hidden = true;
@@ -296,15 +286,17 @@ public final class HiddenChatsVault {
                     }
                 }
             } finally {
-                for (Long id : pendingIds) {
-                    String key = filterCacheKey(id.longValue());
-                    FILTER_CACHE_PENDING.remove(key);
-                    CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
-                    if (waiters != null) {
-                        for (Runnable waiter : waiters) {
-                            waiter.run();
-                        }
+                ArrayList<Runnable> callbacks = new ArrayList<>();
+                synchronized (FILTER_CACHE_LOCK) {
+                    for (Long id : pendingIds) {
+                        String key = filterCacheKey(id.longValue());
+                        FILTER_CACHE_PENDING.remove(key);
+                        CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
+                        if (waiters != null) callbacks.addAll(waiters);
                     }
+                }
+                for (Runnable callback : callbacks) {
+                    callback.run();
                 }
             }
         });
