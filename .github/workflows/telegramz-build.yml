@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - telegramz-stability-privacy-fixes
+  pull_request:
+    branches:
+      - feature/local-hidden-chats
 
 permissions:
   contents: read
