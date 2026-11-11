@@ -68,6 +68,7 @@ public final class HiddenChatsVault {
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
+    private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
     private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final ConcurrentHashMap<String, CopyOnWriteArrayList<Runnable>> FILTER_CACHE_WAITERS = new ConcurrentHashMap<String, CopyOnWriteArrayList<Runnable>>();
     private static final ConcurrentHashMap<Integer, AtomicInteger> FILTER_CACHE_GENERATIONS = new ConcurrentHashMap<Integer, AtomicInteger>();
@@ -273,7 +274,9 @@ public final class HiddenChatsVault {
                     boolean hidden = tokens == null;
                     if (tokens != null) {
                         try {
-                            hidden = tokens.contains(dialogToken(id.longValue()));
+                            String token = dialogToken(id.longValue());
+                            FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
+                            hidden = tokens.contains(token);
                         } catch (Exception e) {
                             hidden = true;
                         }
@@ -383,7 +386,13 @@ public final class HiddenChatsVault {
 
         Set<String> filterTokens = new LinkedHashSet<String>();
         for (Long id : hiddenDialogIds) {
-            filterTokens.add(dialogToken(id.longValue()));
+            String cacheKey = filterCacheKey(id.longValue());
+            String token = FILTER_TOKEN_CACHE.get(cacheKey);
+            if (token == null) {
+                token = dialogToken(id.longValue());
+                FILTER_TOKEN_CACHE.put(cacheKey, token);
+            }
+            filterTokens.add(token);
         }
         boolean saved = preferences.edit()
                 .putString(KEY_PAYLOAD, Base64.encodeToString(payload.array(), Base64.NO_WRAP))
