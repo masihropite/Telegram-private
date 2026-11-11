@@ -48,8 +48,8 @@ public final class LocalProfilePhotoSettings {
         if (user == null) return false;
         TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
         if (privatePhoto) {
-            return user.photo != null && user.photo.personal || full != null && full.personal_photo != null;
+            return user.photo != null && user.photo.personal && user.photo.photo_big != null || full != null && full.personal_photo != null;
         }
-        return user.photo != null && !user.photo.personal || full != null && UserObject.hasFallbackPhoto(full);
+        return user.photo != null && !user.photo.personal && user.photo.photo_big != null || full != null && UserObject.hasFallbackPhoto(full);
     }
 }
