@@ -214,13 +214,11 @@ public final class HiddenChatsVault {
             return;
         }
         final ArrayList<Long> pendingIds = new ArrayList<>();
-        final ArrayList<String> missingKeys = new ArrayList<>();
         final Set<String> seenKeys = new LinkedHashSet<>();
         for (Long id : dialogIds) {
             if (id == null) continue;
             String key = filterCacheKey(id.longValue());
             if (!seenKeys.add(key) || FILTER_CACHE.containsKey(key)) continue;
-            missingKeys.add(key);
             if (onReady != null) {
                 CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.get(key);
                 if (waiters == null) {
@@ -276,7 +274,7 @@ public final class HiddenChatsVault {
                     CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
                     if (waiters != null) {
                         for (Runnable waiter : waiters) {
-                            waiter.run();
+                            AndroidUtilities.runOnUIThread(waiter);
                         }
                     }
                 }
