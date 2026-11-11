@@ -182,6 +182,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     private int currentItemCount;
     private int folderId;
     private ArrayList<ContactEntry> allContacts;
+    private final HashSet<Long> hiddenFilterRequests = new HashSet<>();
 
     public void setFilterDialogIds(ArrayList<Long> filterDialogIds) {
         this.filterDialogIds = filterDialogIds;
@@ -1531,9 +1532,13 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private void prepareHiddenDialogFilter(HiddenChatsVault vault, long dialogId) {
+        if (vault.isDialogFilterCached(dialogId) || !hiddenFilterRequests.add(dialogId)) {
+            return;
+        }
         ArrayList<Long> ids = new ArrayList<>(1);
         ids.add(dialogId);
         vault.prepareDialogFilterCache(ids, () -> {
+            hiddenFilterRequests.remove(dialogId);
             filterRecent(lastSearchText != null ? lastSearchText.trim() : null);
             notifyDataSetChanged();
         });
