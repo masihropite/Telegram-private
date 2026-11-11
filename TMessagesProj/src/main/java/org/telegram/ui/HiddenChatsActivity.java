@@ -92,7 +92,8 @@ public class HiddenChatsActivity extends BaseFragment {
         content.addView(showHidden, new LinearLayout.LayoutParams(-1, -2));
 
         Button add = new Button(context);
-        add.setText("مخفی کردن گفتگوها");
+        add.setText("افزودن گفتگو");
+        add.setGravity(Gravity.CENTER);
         add.setOnClickListener(v -> openChatPicker());
         content.addView(add, new LinearLayout.LayoutParams(-1, -2));
 
