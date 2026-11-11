@@ -21,7 +21,9 @@ public final class LocalProfilePhotoVisibility {
 
     private static SharedPreferences preferences(int account) {
         Context context = ApplicationLoader.applicationContext;
-        return context.getSharedPreferences(PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+        long userId = UserConfig.getInstance(account).getClientUserId();
+        String suffix = userId != 0 ? "user_" + userId : "account_" + account;
+        return context.getSharedPreferences(PREFS_NAME + "_" + suffix, Context.MODE_PRIVATE);
     }
 
     public static boolean isPrivateHidden(int account) {
