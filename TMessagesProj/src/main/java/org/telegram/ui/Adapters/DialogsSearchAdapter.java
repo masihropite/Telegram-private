@@ -1522,10 +1522,18 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             }
         }
         if (dialogId != 0) {
-            HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
-            prepareHiddenDialogFilter(vault, dialogId);
-            if (vault.isDialogHiddenForFiltering(dialogId)) {
-                return null;
+            boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
+            if (hiddenMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                if (activeVault == null || !activeVault.isUnlocked() || !activeVault.isDialogHidden(dialogId)) {
+                    return null;
+                }
+            } else {
+                HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
+                prepareHiddenDialogFilter(vault, dialogId);
+                if (vault.isDialogHiddenForFiltering(dialogId)) {
+                    return null;
+                }
             }
         }
         return object;
