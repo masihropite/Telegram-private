@@ -263,10 +263,17 @@ public final class HiddenChatsVault {
             try {
                 Set<String> tokens;
                 try {
-                    Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-                    tokens = storedTokens == null
-                            ? Collections.<String>emptySet()
-                            : new LinkedHashSet<String>(storedTokens);
+                    boolean configured = preferences.contains(KEY_PAYLOAD);
+                    boolean hasFilterTokens = preferences.contains(KEY_FILTER_TOKENS);
+                    if (configured && !hasFilterTokens) {
+                        // Older or damaged vault data must fail closed until it is unlocked and migrated.
+                        tokens = null;
+                    } else {
+                        Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                        tokens = storedTokens == null
+                                ? Collections.<String>emptySet()
+                                : new LinkedHashSet<String>(storedTokens);
+                    }
                 } catch (Exception e) {
                     tokens = null;
                 }
