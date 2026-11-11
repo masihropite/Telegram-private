@@ -67,7 +67,7 @@ public final class HiddenChatsVault {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
-    private static volatile HiddenChatsVault activeVault;
+    private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
     private static final String FILTER_TOKEN_FAILED = "__FILTER_TOKEN_FAILED__";
     private static final ConcurrentHashMap<Long, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<Long, String>();
     private static final Set<Long> FILTER_TOKEN_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
@@ -78,6 +78,7 @@ public final class HiddenChatsVault {
     });
 
     private final SharedPreferences preferences;
+    private final int account;
     private final Set<Long> hiddenDialogIds = new LinkedHashSet<Long>();
     private volatile Set<String> cachedFilterTokens;
 
@@ -92,22 +93,28 @@ public final class HiddenChatsVault {
         if (context == null) {
             throw new IllegalArgumentException("Context must not be null");
         }
+        this.account = account;
         preferences = context.getApplicationContext().getSharedPreferences(
                 PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
     }
 
     public void registerAsActiveVault() {
-        activeVault = this;
+        ACTIVE_VAULTS.put(account, this);
     }
 
     public static HiddenChatsVault getActiveVault() {
-        return activeVault;
+        return getActiveVault(UserConfig.selectedAccount);
+    }
+
+    public static HiddenChatsVault getActiveVault(int account) {
+        return ACTIVE_VAULTS.get(account);
     }
 
     public static void lockActiveVault() {
-        HiddenChatsVault current = activeVault;
-        if (current != null) {
-            current.lock();
+        for (HiddenChatsVault vault : ACTIVE_VAULTS.values()) {
+            if (vault != null) {
+                vault.lock();
+            }
         }
     }
 
