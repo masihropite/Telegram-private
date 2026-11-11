@@ -1,0 +1,50 @@
+name: TelegramZ APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - telegramz-stability-privacy-fixes
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Build TelegramZ (standalone, no private MTProto logging)
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx5g -XX:MaxMetaspaceSize=1g" :TMessagesProj_App:assembleAfatStandalone
+
+      - name: Verify and hash APK
+        run: |
+          test -f TMessagesProj_App/build/outputs/apk/afat/standalone/app.apk
+          sha256sum TMessagesProj_App/build/outputs/apk/afat/standalone/app.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramZ-Android-APK
+          path: TMessagesProj_App/build/outputs/apk/afat/standalone/app.apk
+          if-no-files-found: error
+          retention-days: 7
