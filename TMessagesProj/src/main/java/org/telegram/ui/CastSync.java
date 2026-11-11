@@ -43,9 +43,22 @@ public class CastSync {
     }
 
     private static boolean listened;
+    private static volatile boolean castModuleUnavailable;
+
+    private static boolean isCastModuleUnavailable(Exception error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            String name = cause.getClass().getName();
+            if (name.contains("ModuleUnavailableException") || name.contains("DynamiteModule$LoadingException")) {
+                castModuleUnavailable = true;
+                return true;
+            }
+        }
+        return castModuleUnavailable;
+    }
+
     public static void check(int type) {
         CastSync.type = type;
-        if (listened) return;
+        if (listened || castModuleUnavailable) return;
         try {
             final Context context = getContext();
             if (context == null) return;
@@ -129,11 +142,12 @@ public class CastSync {
             }, CastSession.class);
             listened = true;
         } catch (Exception e) {
-            FileLog.e(e);
+            if (!isCastModuleUnavailable(e)) FileLog.e(e);
         }
     }
 
     public static void stop() {
+        if (castModuleUnavailable) return;
         final Context context = getContext();
         if (context == null) return;
         try {
@@ -146,6 +160,7 @@ public class CastSync {
     }
 
     public static boolean isActive() {
+        if (castModuleUnavailable) return false;
         final Context context = getContext();
         if (context == null) return false;
         try {
@@ -160,6 +175,7 @@ public class CastSync {
     }
 
     public static RemoteMediaClient getClient() {
+        if (castModuleUnavailable) return null;
         final Context context = getContext();
         if (context == null) return null;
         try {
