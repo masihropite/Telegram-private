@@ -7015,6 +7015,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onResume() {
         super.onResume();
+        if (hiddenChatsMode) {
+            HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+            if (activeVault == null || !activeVault.isUnlocked()) {
+                // Returning from the background locks the vault. Pop the
+                // hidden list so the password screen is visible again.
+                finishFragment();
+                return;
+            }
+        }
         if (dialogStoriesCell != null) {
             dialogStoriesCell.onResume();
         }
