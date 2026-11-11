@@ -338,7 +338,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             } else {
                 HiddenChatsVault vault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
                 prepareHiddenDialogFilter(vault, dialogId);
-                hidden = vault.isDialogHiddenForFiltering(dialogId);
+                // Keep uncached global results temporarily; getItem() hides them
+                // until the background check completes, then refreshes the row.
+                hidden = vault.isDialogFilterCached(dialogId)
+                        && vault.isDialogHiddenForFiltering(dialogId);
             }
             if (hiddenMode ? !hidden : hidden) return false;
         }
