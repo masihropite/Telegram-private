@@ -561,7 +561,8 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     public void updateHasHints() {
         visibleHintDialogs.clear();
         boolean allowHints = communityId == 0 && folderId == 0
-                && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect;
+                && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect
+                && (parentFragment == null || !parentFragment.isHiddenChatsMode());
         if (allowHints) {
             HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
             for (TLRPC.TL_topPeer peer : MessagesController.getInstance(currentAccount).hintDialogs) {
