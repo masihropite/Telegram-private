@@ -1,4 +1,5 @@
 name: Build TelegramZ APK
+run-name: Build TelegramZ APK #${{ github.run_number }}
 
 on:
   workflow_dispatch:
