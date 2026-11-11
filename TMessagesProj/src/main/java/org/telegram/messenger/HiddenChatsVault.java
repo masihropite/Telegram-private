@@ -286,26 +286,43 @@ public final class HiddenChatsVault {
             throw new IllegalArgumentException("Dialog ID must not be zero");
         }
         if (hiddenDialogIds.add(dialogId)) {
-            persist();
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.remove(dialogId);
+                throw e;
+            }
         }
     }
 
     public synchronized void hideDialogs(List<Long> dialogIds) throws GeneralSecurityException {
         requireUnlocked();
         if (dialogIds == null || dialogIds.isEmpty()) return;
-        boolean changed = false;
+        ArrayList<Long> added = new ArrayList<>();
         for (Long id : dialogIds) {
-            if (id != null && id.longValue() != 0) {
-                changed |= hiddenDialogIds.add(id);
+            if (id != null && id.longValue() != 0 && hiddenDialogIds.add(id)) {
+                added.add(id);
             }
         }
-        if (changed) persist();
+        if (!added.isEmpty()) {
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.removeAll(added);
+                throw e;
+            }
+        }
     }
 
     public synchronized void unhideDialog(long dialogId) throws GeneralSecurityException {
         requireUnlocked();
         if (hiddenDialogIds.remove(dialogId)) {
-            persist();
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.add(dialogId);
+                throw e;
+            }
         }
     }
 
