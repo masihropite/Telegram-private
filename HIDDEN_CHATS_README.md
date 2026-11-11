@@ -6,12 +6,12 @@ This branch adds a device-local hidden-chat area to the Android client.
 
 1. Open the main Chats screen.
 2. Tap the title at the top five times within about 1.5 seconds.
-3. On first use, create a password with at least 8 characters, including English letters and digits, then confirm it.
-4. Unlock the area and choose **Hide existing chats**.
-5. Select one or more chats. Their messages remain in Telegram's normal local database and are not deleted.
-6. Tap a hidden chat's name to open it, or choose **Unhide** to return it to the normal list.
+3. On first use, create and confirm a password containing exactly six ASCII digits.
+4. Unlock the area. The management screen stays open so you can manage hidden chats.
+5. Choose **افزودن گفتگو** to select chats. Their messages remain in Telegram's normal local database and are not deleted.
+6. Use **مشاهده گفتگوهای مخفی** to open the native hidden-chat list. In the management screen, choose **نمایش دوباره** to restore a chat to the normal list.
 
-The vault locks when its fragment is closed or when the app leaves the foreground. Once the hidden area is opened, Android's secure-window flag remains enabled for the rest of that app session so that opening a hidden chat does not expose it in screenshots or recent-app previews. This also disables screenshots of ordinary screens until the app process is restarted.
+The vault is locked when its management fragment is destroyed without handing off to the hidden list, and the hidden-list fragment locks it when that fragment is destroyed. App-background locking has not yet been verified. Android's secure-window flag is set while the hidden dialog list is active and cleared when that fragment is destroyed; it is not a session-wide screenshot lock.
 
 ## Local protection
 
@@ -20,7 +20,7 @@ The vault locks when its fragment is closed or when the app leaves the foregroun
 - The normal chat list can filter hidden chats while the vault is locked by using non-reversible HMAC tokens protected by Android Keystore.
 - Vault data is stored separately for each Telegram account.
 - New notifications from hidden chats are suppressed, and existing notification entries are cleared when a chat is hidden.
-- Ordinary dialog search results are filtered before returning hidden peers/messages.
+- Dialog lists, folder/user pickers, recent searches, hints, and search results filter hidden peers. HMAC checks are precomputed on a background queue; uncached items remain hidden until their check completes.
 
 This is local visibility protection, not a second Telegram account or server-side archive. It does not encrypt Telegram's underlying message database independently of Telegram's own storage protection.
 
