@@ -294,11 +294,15 @@ public class HiddenChatsActivity extends BaseFragment {
         DialogsActivity picker = new DialogsActivity(args);
         picker.setDelegate((fragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
             try {
+                ArrayList<Long> selectedDialogIds = new ArrayList<>();
                 for (MessagesStorage.TopicKey key : dids) {
                     if (key.topicId == 0) {
-                        vault.hideDialog(key.dialogId);
-                        org.telegram.messenger.NotificationsController.getInstance(currentAccount).removeNotificationsForDialog(key.dialogId);
+                        selectedDialogIds.add(key.dialogId);
                     }
+                }
+                vault.hideDialogs(selectedDialogIds);
+                for (Long dialogId : selectedDialogIds) {
+                    org.telegram.messenger.NotificationsController.getInstance(currentAccount).removeNotificationsForDialog(dialogId);
                 }
                 org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                 fragment.finishFragment();
