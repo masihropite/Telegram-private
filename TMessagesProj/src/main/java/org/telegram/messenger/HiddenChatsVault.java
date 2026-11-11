@@ -243,6 +243,7 @@ public final class HiddenChatsVault {
             if (version == LEGACY_FORMAT_VERSION) {
                 try {
                     persist();
+                    clearLegacyPreferences();
                 } catch (GeneralSecurityException e) {
                     FileLog.e(e);
                 }
@@ -262,6 +263,20 @@ public final class HiddenChatsVault {
             if (finalKey != null && finalKey != unlockedKey && finalKey != candidateKey) {
                 clear(finalKey);
             }
+        }
+    }
+
+    private void clearLegacyPreferences() {
+        long userId = UserConfig.getInstance(account).getClientUserId();
+        SharedPreferences legacyPreferences = ApplicationLoader.applicationContext.getSharedPreferences(
+                LEGACY_PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
+        if (userId != 0 && legacyPreferences.getLong(KEY_OWNER_USER_ID, 0L) == userId) {
+            legacyPreferences.edit()
+                    .remove(KEY_PAYLOAD)
+                    .remove(KEY_FILTER_TOKENS)
+                    .remove(KEY_FAILED_ATTEMPTS)
+                    .remove(KEY_NEXT_UNLOCK_TIME)
+                    .commit();
         }
     }
 
