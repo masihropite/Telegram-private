@@ -272,7 +272,10 @@ public final class HiddenChatsVault {
                 }
                 for (Long id : pendingIds) {
                     boolean hidden = tokens == null;
-                    if (tokens != null) {
+                    if (tokens != null && tokens.isEmpty()) {
+                        // No hidden dialogs means no Keystore/HMAC work is needed.
+                        hidden = false;
+                    } else if (tokens != null) {
                         try {
                             String token = dialogToken(id.longValue());
                             FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
