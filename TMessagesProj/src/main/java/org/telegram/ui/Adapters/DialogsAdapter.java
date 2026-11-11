@@ -1669,7 +1669,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
         // Hidden chats are filtered from every normal folder and shown only
         // in the dedicated native Telegram-style list.
-        if (!isOnlySelect && array != null) {
+        if (array != null) {
             HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
