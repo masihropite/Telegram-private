@@ -57,7 +57,8 @@ public final class HiddenChatsVault {
     private static final String KEY_FAILED_ATTEMPTS = "failed_unlock_attempts";
     private static final String KEY_NEXT_UNLOCK_TIME = "next_unlock_allowed_at";
     private static final String KEYSTORE_ALIAS = "telegram_hidden_chats_filter_hmac_v1";
-    private static final int FORMAT_VERSION = 1;
+    private static final int LEGACY_FORMAT_VERSION = 1;
+    private static final int FORMAT_VERSION = 2;
     private static final int SALT_BYTES = 16;
     private static final int IV_BYTES = 12;
     private static final int KEY_BITS = 256;
@@ -137,7 +138,12 @@ public final class HiddenChatsVault {
         validatePassword(password);
         salt = new byte[SALT_BYTES];
         RANDOM.nextBytes(salt);
-        unlockedKey = deriveKey(password, salt);
+        byte[] pinKey = deriveKey(password, salt);
+        try {
+            unlockedKey = deriveVaultKey(pinKey);
+        } finally {
+            clear(pinKey);
+        }
         hiddenDialogIds.clear();
         persist();
     }
@@ -171,7 +177,7 @@ public final class HiddenChatsVault {
 
         ByteBuffer buffer = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN);
         int version = buffer.get() & 0xff;
-        if (version != FORMAT_VERSION) {
+        if (version != LEGACY_FORMAT_VERSION && version != FORMAT_VERSION) {
             throw new GeneralSecurityException("Unsupported hidden chats data version");
         }
 
@@ -182,25 +188,51 @@ public final class HiddenChatsVault {
         byte[] ciphertext = new byte[buffer.remaining()];
         buffer.get(ciphertext);
 
-        byte[] candidateKey = deriveKey(password, storedSalt);
+        byte[] pinKey = deriveKey(password, storedSalt);
+        byte[] candidateKey = null;
+        byte[] finalKey = null;
         try {
-            byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext);
+            // Version 1 used the PIN-derived key directly. Version 2 combines
+            // it with a non-exportable Android Keystore HMAC key, preventing
+            // offline PIN guessing from an extracted preferences file.
+            candidateKey = version == LEGACY_FORMAT_VERSION ? pinKey : deriveVaultKey(pinKey);
+            byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext, version);
             Set<Long> restored = deserializeDialogIds(plaintext);
+            finalKey = version == LEGACY_FORMAT_VERSION ? deriveVaultKey(pinKey) : candidateKey;
+
             clear(unlockedKey);
             clear(salt);
-            unlockedKey = candidateKey;
+            unlockedKey = finalKey;
+            finalKey = null;
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
+
+            // Migrate legacy data without making a successful unlock fail if
+            // the migration write is interrupted. The legacy payload remains
+            // readable and will be migrated on a later successful unlock.
+            if (version == LEGACY_FORMAT_VERSION) {
+                try {
+                    persist();
+                } catch (GeneralSecurityException e) {
+                    FileLog.e(e);
+                }
+            }
             preferences.edit().remove(KEY_FAILED_ATTEMPTS).remove(KEY_NEXT_UNLOCK_TIME).apply();
         } catch (GeneralSecurityException e) {
-            clear(candidateKey);
             recordFailedUnlockAttempt();
             throw new GeneralSecurityException("Incorrect password or damaged hidden chats data", e);
         } catch (RuntimeException e) {
-            clear(candidateKey);
             recordFailedUnlockAttempt();
             throw new GeneralSecurityException("Hidden chats data is invalid", e);
+        } finally {
+            clear(pinKey);
+            if (candidateKey != null && candidateKey != unlockedKey) {
+                clear(candidateKey);
+            }
+            if (finalKey != null && finalKey != unlockedKey && finalKey != candidateKey) {
+                clear(finalKey);
+            }
         }
     }
 
@@ -370,6 +402,19 @@ public final class HiddenChatsVault {
     }
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(getFilterKey());
+        byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
+        return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
+    }
+
+    private static byte[] deriveVaultKey(byte[] pinKey) throws GeneralSecurityException {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(getFilterKey());
+        return mac.doFinal(pinKey);
+    }
+
+    private static SecretKey getFilterKey() throws GeneralSecurityException {
         try {
             SecretKey key = cachedFilterKey;
             if (key == null) {
@@ -392,10 +437,7 @@ public final class HiddenChatsVault {
                     }
                 }
             }
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(key);
-            byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
-            return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
+            return key;
         } catch (GeneralSecurityException e) {
             throw e;
         } catch (Exception e) {
@@ -416,9 +458,14 @@ public final class HiddenChatsVault {
 
     private static byte[] crypt(int mode, byte[] key, byte[] iv, byte[] input)
             throws GeneralSecurityException {
+        return crypt(mode, key, iv, input, FORMAT_VERSION);
+    }
+
+    private static byte[] crypt(int mode, byte[] key, byte[] iv, byte[] input, int formatVersion)
+            throws GeneralSecurityException {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(mode, new SecretKeySpec(key, "AES"), new GCMParameterSpec(GCM_TAG_BITS, iv));
-        cipher.updateAAD(new byte[] { (byte) FORMAT_VERSION });
+        cipher.updateAAD(new byte[] { (byte) formatVersion });
         return cipher.doFinal(input);
     }
 
