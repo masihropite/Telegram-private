@@ -148,6 +148,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     private DialogsActivity parentFragment;
     private boolean isTransitionSupport;
+    private boolean hiddenFilterPreloadPending;
 
     private TLRPC.RequestPeerType requestPeerType;
     public boolean isEmpty;
@@ -1676,7 +1677,13 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 TLRPC.Dialog dialog = array.get(i);
                 if (dialog != null) filterDialogIds.add(dialog.id);
             }
-            hiddenVault.prepareDialogFilterCache(filterDialogIds, this::notifyDataSetChanged);
+            if (!hiddenFilterPreloadPending) {
+                hiddenFilterPreloadPending = true;
+                hiddenVault.prepareDialogFilterCache(filterDialogIds, () -> {
+                    hiddenFilterPreloadPending = false;
+                    notifyDataSetChanged();
+                });
+            }
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
