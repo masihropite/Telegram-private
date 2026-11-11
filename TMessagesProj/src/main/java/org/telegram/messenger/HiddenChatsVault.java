@@ -265,10 +265,6 @@ public final class HiddenChatsVault {
     }
 
     /**
-     * Checks hidden state without unlocking. Only one-way HMAC tokens are
-     * persisted, allowing the main chat list to remain filtered while locked.
-     */
-    /**
      * Precomputes dialog filter tokens away from the UI thread. The main dialog
      * list must never invoke Android Keystore operations while drawing/updating.
      *
