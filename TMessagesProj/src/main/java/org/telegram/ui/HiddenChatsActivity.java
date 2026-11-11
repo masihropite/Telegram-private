@@ -68,7 +68,7 @@ public class HiddenChatsActivity extends BaseFragment {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         TextView description = new TextView(context);
-        description.setText("گفتگوهای این بخش فقط در همین دستگاه مخفی می‌شوند و هیچ پیامی حذف نخواهد شد.");
+        description.setText("گفتگوهای این بخش فقط در همین دستگاه مخفی می‌شوند و هیچ پیامی حذف نخواهد شد. مخزن با کلید امن همین دستگاه رمزگذاری می‌شود و ممکن است با انتقال برنامه به گوشی دیگر قابل بازیابی نباشد.");
         description.setTextSize(14);
         content.addView(description, new LinearLayout.LayoutParams(-1, -2));
 
