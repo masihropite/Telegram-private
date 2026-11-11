@@ -1671,6 +1671,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         // in the dedicated native Telegram-style list.
         if (array != null) {
             HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+            ArrayList<Long> filterDialogIds = new ArrayList<>(array.size());
+            for (int i = 0; i < array.size(); i++) {
+                TLRPC.Dialog dialog = array.get(i);
+                if (dialog != null) filterDialogIds.add(dialog.id);
+            }
+            hiddenVault.prepareDialogFilterCache(filterDialogIds, this::notifyDataSetChanged);
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
