@@ -129,7 +129,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 ApplicationLoader.applicationContext, currentAccount, privatePhoto, !current);
         if (!saved) {
             Toast.makeText(getParentActivity(),
-                    "برای اینکه حداقل یک عکس قابل مشاهده بماند، ابتدا عکس دیگر را نمایش دهید.",
+                    "برای مخفی‌کردن این عکس باید یک عکس جایگزین دیگر در پروفایل موجود و قابل نمایش باشد.",
                     Toast.LENGTH_LONG).show();
             return;
         }
