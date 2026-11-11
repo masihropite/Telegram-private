@@ -6970,7 +6970,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private void secureHiddenChatStacks() {
-        HiddenChatsVault vault = HiddenChatsVault.getActiveVault();
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
         if (vault == null || vault.isUnlocked()) {
             return;
         }
