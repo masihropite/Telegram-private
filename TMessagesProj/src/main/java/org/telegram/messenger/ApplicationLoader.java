@@ -341,6 +341,14 @@ public class ApplicationLoader extends Application {
                     ensureCurrentNetworkGet(true);
                 }
             }
+
+            @Override
+            public void onActivityStopped(Activity activity) {
+                super.onActivityStopped(activity);
+                if (isBackground()) {
+                    HiddenChatsVault.lockActiveVault();
+                }
+            }
         };
         if (BuildConfig.DEBUG_VERSION) {
             new ANRDetector(FileLog::dumpANR);
