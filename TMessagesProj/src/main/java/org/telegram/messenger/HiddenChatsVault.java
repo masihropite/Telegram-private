@@ -120,8 +120,9 @@ public final class HiddenChatsVault {
                 editor.putInt(KEY_FAILED_ATTEMPTS, legacyPreferences.getInt(KEY_FAILED_ATTEMPTS, 0));
                 editor.putLong(KEY_NEXT_UNLOCK_TIME, legacyPreferences.getLong(KEY_NEXT_UNLOCK_TIME, 0L));
                 editor.putLong(KEY_OWNER_USER_ID, userId);
-                editor.commit();
-                legacyPreferences.edit().putLong(KEY_OWNER_USER_ID, userId).apply();
+                if (editor.commit()) {
+                    legacyPreferences.edit().putLong(KEY_OWNER_USER_ID, userId).commit();
+                }
             }
         }
         preferences = scopedPreferences;
