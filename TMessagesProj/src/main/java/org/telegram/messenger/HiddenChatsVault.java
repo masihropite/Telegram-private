@@ -303,6 +303,18 @@ public final class HiddenChatsVault {
         }
     }
 
+    public synchronized void hideDialogs(List<Long> dialogIds) throws GeneralSecurityException {
+        requireUnlocked();
+        if (dialogIds == null || dialogIds.isEmpty()) return;
+        boolean changed = false;
+        for (Long id : dialogIds) {
+            if (id != null && id.longValue() != 0) {
+                changed |= hiddenDialogIds.add(id);
+            }
+        }
+        if (changed) persist();
+    }
+
     public synchronized void unhideDialog(long dialogId) throws GeneralSecurityException {
         requireUnlocked();
         if (hiddenDialogIds.remove(dialogId)) {
