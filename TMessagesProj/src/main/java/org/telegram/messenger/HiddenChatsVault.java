@@ -216,22 +216,35 @@ public final class HiddenChatsVault {
             return;
         }
         final ArrayList<Long> pendingIds = new ArrayList<>();
+        final ArrayList<String> missingKeys = new ArrayList<>();
         final Set<String> seenKeys = new LinkedHashSet<>();
         for (Long id : dialogIds) {
             if (id == null) continue;
             String key = filterCacheKey(id.longValue());
             if (!seenKeys.add(key) || FILTER_CACHE.containsKey(key)) continue;
-            if (onReady != null) {
+            missingKeys.add(key);
+            if (FILTER_CACHE_PENDING.add(key)) {
+                pendingIds.add(id);
+            }
+        }
+        if (missingKeys.isEmpty()) {
+            return;
+        }
+        if (onReady != null) {
+            final AtomicInteger remaining = new AtomicInteger(missingKeys.size());
+            Runnable readyCallback = () -> {
+                if (remaining.decrementAndGet() == 0) {
+                    AndroidUtilities.runOnUIThread(onReady);
+                }
+            };
+            for (String key : missingKeys) {
                 CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.get(key);
                 if (waiters == null) {
                     CopyOnWriteArrayList<Runnable> created = new CopyOnWriteArrayList<>();
                     CopyOnWriteArrayList<Runnable> existing = FILTER_CACHE_WAITERS.putIfAbsent(key, created);
                     waiters = existing == null ? created : existing;
                 }
-                waiters.addIfAbsent(onReady);
-            }
-            if (FILTER_CACHE_PENDING.add(key)) {
-                pendingIds.add(id);
+                waiters.add(readyCallback);
             }
         }
         if (pendingIds.isEmpty()) {
@@ -276,7 +289,7 @@ public final class HiddenChatsVault {
                     CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
                     if (waiters != null) {
                         for (Runnable waiter : waiters) {
-                            AndroidUtilities.runOnUIThread(waiter);
+                            waiter.run();
                         }
                     }
                 }
