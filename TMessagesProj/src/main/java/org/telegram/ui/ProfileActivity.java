@@ -6993,7 +6993,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         TLRPC.Photo carouselPhoto = avatarsViewPager != null ? avatarsViewPager.getPhoto(carouselPosition) : null;
         if (userId != 0) {
             TLRPC.User user = getMessagesController().getUser(userId);
-            if (user.photo != null && user.photo.photo_big != null) {
+            if (user != null && user.photo != null && user.photo.photo_big != null) {
+                boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                        && (user.photo.personal
+                        ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                        : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount));
+                boolean isCurrentPhoto = carouselPhoto == null || carouselPhoto.id == user.photo.photo_id;
+                if (hideCurrentPhoto && isCurrentPhoto) {
+                    return;
+                }
                 PhotoViewer.getInstance().setParentActivity(ProfileActivity.this);
                 if (user.photo.dc_id != 0) {
                     user.photo.photo_big.dc_id = user.photo.dc_id;
