@@ -1767,7 +1767,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 if (dialog == null) continue;
                 boolean hidden;
                 if (hiddenChatsMode) {
-                    HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                    HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                     hidden = activeVault == null || !activeVault.isUnlocked() || activeVault.isDialogHidden(dialog.id);
                 } else {
                     hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
