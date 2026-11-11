@@ -97,6 +97,16 @@ public class HiddenChatsActivity extends BaseFragment {
         add.setOnClickListener(v -> openChatPicker());
         content.addView(add, new LinearLayout.LayoutParams(-1, -2));
 
+        Button privatePhoto = new Button(context);
+        updateProfilePhotoButton(privatePhoto, true);
+        privatePhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(true, privatePhoto));
+        content.addView(privatePhoto, new LinearLayout.LayoutParams(-1, -2));
+
+        Button publicPhoto = new Button(context);
+        updateProfilePhotoButton(publicPhoto, false);
+        publicPhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(false, publicPhoto));
+        content.addView(publicPhoto, new LinearLayout.LayoutParams(-1, -2));
+
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         content.addView(rows, new LinearLayout.LayoutParams(-1, -2));
@@ -107,6 +117,32 @@ public class HiddenChatsActivity extends BaseFragment {
 
     private static int dp(Context context, float value) {
         return (int) (value * context.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void updateProfilePhotoButton(Button button, boolean privatePhoto) {
+        boolean hidden = privatePhoto
+                ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+        String kind = privatePhoto ? "خصوصی" : "عمومی";
+        button.setText((hidden ? "نمایش عکس " : "مخفی‌کردن عکس ") + kind);
+    }
+
+    private void toggleProfilePhotoVisibility(boolean privatePhoto, Button button) {
+        boolean current = privatePhoto
+                ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+        boolean saved = org.telegram.messenger.LocalProfilePhotoSettings.setHidden(
+                ApplicationLoader.applicationContext, currentAccount, privatePhoto, !current);
+        if (!saved) {
+            Toast.makeText(getParentActivity(),
+                    "برای اینکه حداقل یک عکس قابل مشاهده بماند، ابتدا عکس دیگر را نمایش دهید.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        updateProfilePhotoButton(button, privatePhoto);
+        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
+                org.telegram.messenger.NotificationCenter.updateInterfaces,
+                org.telegram.messenger.MessagesController.UPDATE_MASK_AVATAR);
     }
 
     private void requestPassword() {
