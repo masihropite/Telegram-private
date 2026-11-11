@@ -923,11 +923,22 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 fallbackPhotoIndex = -1;
                 TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
                 TLRPC.UserFull fullUser = MessagesController.getInstance(currentAccount).getUserFull(dialogId);
-                if (fullUser != null && fullUser.personal_photo != null) {
+                boolean hidePrivatePhoto = user != null && user.self
+                        && org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+                boolean hidePublicPhoto = user != null && user.self
+                        && org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+                if (user != null && user.self && user.photo != null) {
+                    boolean hideCurrentPhoto = user.photo.personal ? hidePrivatePhoto : hidePublicPhoto;
+                    if (hideCurrentPhoto) {
+                        final long hiddenPhotoId = user.photo.photo_id;
+                        arrayList.removeIf(photo -> photo != null && photo.id == hiddenPhotoId);
+                    }
+                }
+                if (fullUser != null && fullUser.personal_photo != null && !hidePrivatePhoto) {
                     arrayList.add(0, fullUser.personal_photo);
                     customAvatarIndex = 0;
                 }
-                if (user != null && user.self) {
+                if (user != null && user.self && !hidePublicPhoto) {
                     if (UserObject.hasFallbackPhoto(fullUser)) {
                         arrayList.add(fullUser.fallback_photo);
                         fallbackPhotoIndex = arrayList.size() - 1;
