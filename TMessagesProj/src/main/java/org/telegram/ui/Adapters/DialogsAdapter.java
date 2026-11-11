@@ -188,7 +188,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             position--;
         }
         if (hasHints) {
-            position -= 2 + MessagesController.getInstance(currentAccount).hintDialogs.size();
+            position -= 2 + visibleHintDialogs.size();
         }
         if (allowForwardAsStories && dialogsType == DialogsActivity.DIALOGS_TYPE_FORWARD) {
             position -= 1;
@@ -542,8 +542,36 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         return archiveHintCell != null ? archiveHintCell.getViewPager() : null;
     }
 
+    private final ArrayList<TLRPC.TL_topPeer> visibleHintDialogs = new ArrayList<>();
+
+    private long getTopPeerDialogId(TLRPC.TL_topPeer peer) {
+        if (peer == null || peer.peer == null) {
+            return 0;
+        }
+        if (peer.peer.user_id != 0) {
+            return peer.peer.user_id;
+        } else if (peer.peer.channel_id != 0) {
+            return -peer.peer.channel_id;
+        } else if (peer.peer.chat_id != 0) {
+            return -peer.peer.chat_id;
+        }
+        return 0;
+    }
+
     public void updateHasHints() {
-        hasHints = folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect && !MessagesController.getInstance(currentAccount).hintDialogs.isEmpty();
+        visibleHintDialogs.clear();
+        boolean allowHints = communityId == 0 && folderId == 0
+                && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect;
+        if (allowHints) {
+            HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
+            for (TLRPC.TL_topPeer peer : MessagesController.getInstance(currentAccount).hintDialogs) {
+                long dialogId = getTopPeerDialogId(peer);
+                if (dialogId != 0 && !vault.isDialogHiddenForFiltering(dialogId)) {
+                    visibleHintDialogs.add(peer);
+                }
+            }
+        }
+        hasHints = allowHints && !visibleHintDialogs.isEmpty();
     }
 
     boolean isCalculatingDiff;
@@ -1713,6 +1741,14 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     dialogIds.add(dialog.id);
                 }
             }
+            if (communityId == 0 && folderId == 0 && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT && !isOnlySelect) {
+                for (TLRPC.TL_topPeer peer : messagesController.hintDialogs) {
+                    long hintDialogId = getTopPeerDialogId(peer);
+                    if (hintDialogId != 0) {
+                        dialogIds.add(hintDialogId);
+                    }
+                }
+            }
             if (!hiddenVault.prepareFilterTokens(dialogIds, () -> updateList(null))) {
                 return;
             }
@@ -1863,10 +1899,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             itemInternals.add(new ItemInternal(VIEW_TYPE_LAST_EMPTY));
             stopUpdate = true;
         } else if (hasHints) {
-            int count = MessagesController.getInstance(currentAccount).hintDialogs.size();
+            int count = visibleHintDialogs.size();
             itemInternals.add(new ItemInternal(VIEW_TYPE_RECENTLY_VIEWED));
             for (int k = 0; k < count; k++) {
-                itemInternals.add(new ItemInternal(VIEW_TYPE_ME_URL, MessagesController.getInstance(currentAccount).hintDialogs.get(k)));
+                itemInternals.add(new ItemInternal(VIEW_TYPE_ME_URL, visibleHintDialogs.get(k)));
             }
             itemInternals.add(new ItemInternal(VIEW_TYPE_DIVIDER));
         } else if (dialogsType == DialogsActivity.DIALOGS_TYPE_IMPORT_HISTORY_GROUPS || dialogsType == DialogsActivity.DIALOGS_TYPE_IMPORT_HISTORY) {
