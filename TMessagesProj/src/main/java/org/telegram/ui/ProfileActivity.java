@@ -11605,7 +11605,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     hasFallbackPhoto = true;
                     TLRPC.PhotoSize smallSize = FileLoader.getClosestPhotoSizeWithSize(getUserInfo().fallback_photo.sizes, 1000);
                     if (smallSize != null) {
-                        fallbackImage.setImage(ImageLocation.getForPhoto(smallSize, getUserInfo().fallback_photo), "50_50", (Drawable) null, 0, null, UserConfig.getInstance(currentAccount).getCurrentUser(), 0);
+                        fallbackImage.setImage(ImageLocation.getForPhoto(currentAccount, smallSize, getUserInfo().fallback_photo), "50_50", (Drawable) null, 0, null, UserConfig.getInstance(currentAccount).getCurrentUser(), 0);
                     }
                 } else {
                     if (fallbackImage != null) {
