@@ -68,6 +68,8 @@ public final class HiddenChatsVault {
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
+    private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private static final ConcurrentHashMap<String, CopyOnWriteArrayList<Runnable>> FILTER_CACHE_WAITERS = new ConcurrentHashMap<String, CopyOnWriteArrayList<Runnable>>();
     private static final ConcurrentHashMap<Integer, AtomicInteger> FILTER_CACHE_GENERATIONS = new ConcurrentHashMap<Integer, AtomicInteger>();
 
     private final SharedPreferences preferences;
