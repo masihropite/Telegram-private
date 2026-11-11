@@ -177,6 +177,15 @@ public final class HiddenChatsVault {
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
+            boolean needsFilterIndexMigration;
+            try {
+                needsFilterIndexMigration = preferences.getStringSet(KEY_FILTER_TOKENS, null) == null;
+            } catch (Exception e) {
+                needsFilterIndexMigration = true;
+            }
+            if (needsFilterIndexMigration) {
+                persist();
+            }
         } catch (GeneralSecurityException e) {
             clear(candidateKey);
             throw new GeneralSecurityException("Incorrect password or damaged hidden chats data", e);
