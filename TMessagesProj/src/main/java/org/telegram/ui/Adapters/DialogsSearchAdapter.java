@@ -295,8 +295,15 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id);
         }
         if (dialogId != 0) {
-            boolean hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount).isDialogHiddenForFiltering(dialogId);
             boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
+            boolean hidden;
+            if (hiddenMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
+            } else {
+                hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
+                        .isDialogHiddenForFiltering(dialogId);
+            }
             if (hiddenMode ? !hidden : hidden) return false;
         }
         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {

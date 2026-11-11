@@ -1675,7 +1675,13 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
                 if (dialog == null) continue;
-                boolean hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
+                boolean hidden;
+                if (hiddenChatsMode) {
+                    HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                    hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialog.id);
+                } else {
+                    hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
+                }
                 if (hiddenChatsMode ? hidden : !hidden) visibleDialogs.add(dialog);
             }
             array = visibleDialogs;
