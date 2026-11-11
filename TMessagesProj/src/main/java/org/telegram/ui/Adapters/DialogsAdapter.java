@@ -1601,15 +1601,23 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
 
     private void updateItemListForCommunity() {
-        itemInternals.clear();
-        updateHasHints();
-
         MessagesController messagesController = MessagesController.getInstance(currentAccount);
         MessagesController.CommunityPeersDialog communityPeersDialog = messagesController.buildCommunityPeers(communityId);
 
-        dialogsCount = communityPeersDialog.getDialogsCount();
-        isEmpty = false;
+        ArrayList<Long> dialogIds = new ArrayList<>();
+        collectCommunityDialogIds(communityPeersDialog.chatsYouAreIn, dialogIds);
+        collectCommunityDialogIds(communityPeersDialog.chatsYouCanView, dialogIds);
+        collectCommunityDialogIds(communityPeersDialog.chatsYouCanJoin, dialogIds);
+        collectCommunityDialogIds(communityPeersDialog.chatsOther, dialogIds);
+        HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+        if (!hiddenVault.prepareFilterTokens(dialogIds, () -> updateList(null))) {
+            return;
+        }
 
+        itemInternals.clear();
+        updateHasHints();
+        dialogsCount = 0;
+        isEmpty = false;
 
         final int N = dialogsType == DialogsActivity.DIALOGS_TYPE_FORWARD ? 2 : 4;
         for (int b = 0; b < N; b++) {
@@ -1629,10 +1637,16 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 name = getString(R.string.CommunitySectionHiddenChats);
             }
 
-            if (!array.isEmpty()) {
+            ArrayList<MessagesController.CommunityPeerDialog> visiblePeers = new ArrayList<>();
+            for (MessagesController.CommunityPeerDialog peer : array) {
+                long dialogId = getCommunityDialogId(peer);
+                if (dialogId != 0 && !hiddenVault.isDialogHiddenForFiltering(dialogId)) {
+                    visiblePeers.add(peer);
+                }
+            }
+            if (!visiblePeers.isEmpty()) {
                 itemInternals.add(new ItemInternal(VIEW_TYPE_HEADER_3, name));
-                for (int k = 0; k < array.size(); k++) {
-                    MessagesController.CommunityPeerDialog peer = array.get(k);
+                for (MessagesController.CommunityPeerDialog peer : visiblePeers) {
                     if (peer.dialog != null) {
                         itemInternals.add(new ItemInternal(VIEW_TYPE_DIALOG, peer.dialog));
                     } else if (peer.chat != null) {
@@ -1640,7 +1654,30 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                     } else if (peer.user != null) {
                         itemInternals.add(new ItemInternal(VIEW_TYPE_DIALOG_COMMUNITY, peer.user));
                     }
+                    dialogsCount++;
                 }
+            }
+        }
+    }
+
+    private long getCommunityDialogId(MessagesController.CommunityPeerDialog peer) {
+        if (peer == null) {
+            return 0;
+        }
+        if (peer.dialog != null) {
+            return peer.dialog.id;
+        }
+        if (peer.chat != null) {
+            return -peer.chat.id;
+        }
+        return peer.user != null ? peer.user.id : 0;
+    }
+
+    private void collectCommunityDialogIds(ArrayList<MessagesController.CommunityPeerDialog> peers, ArrayList<Long> dialogIds) {
+        for (MessagesController.CommunityPeerDialog peer : peers) {
+            long dialogId = getCommunityDialogId(peer);
+            if (dialogId != 0) {
+                dialogIds.add(dialogId);
             }
         }
     }
