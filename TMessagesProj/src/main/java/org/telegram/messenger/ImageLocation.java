@@ -168,6 +168,10 @@ public class ImageLocation {
         if (user == null || user.photo == null) {
             return null;
         }
+        // Local-only TelegramZ override: never alter the server-side profile.
+        if (LocalProfilePhotoVisibility.shouldHideUserPhoto(currentAccount, user)) {
+            return null;
+        }
         if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             if (MessagesController.getInstance(currentAccount).isPremiumUser(user) && user.photo.has_video) {
                 final TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
