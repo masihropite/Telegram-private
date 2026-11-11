@@ -67,7 +67,6 @@ public final class HiddenChatsVault {
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
-    private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final ConcurrentHashMap<Integer, AtomicInteger> FILTER_CACHE_GENERATIONS = new ConcurrentHashMap<Integer, AtomicInteger>();
 
     private final SharedPreferences preferences;
@@ -214,22 +213,13 @@ public final class HiddenChatsVault {
             return;
         }
         final ArrayList<Long> pendingIds = new ArrayList<>();
-        boolean hasUncachedIds = false;
         for (Long id : dialogIds) {
             if (id == null) continue;
-            String key = filterCacheKey(id.longValue());
-            if (!FILTER_CACHE.containsKey(key)) {
-                hasUncachedIds = true;
-                if (FILTER_CACHE_PENDING.add(key)) {
-                    pendingIds.add(id);
-                }
+            if (!FILTER_CACHE.containsKey(filterCacheKey(id.longValue()))) {
+                pendingIds.add(id);
             }
         }
         if (pendingIds.isEmpty()) {
-            if (hasUncachedIds && onReady != null) {
-                // Join an already queued preload so every adapter gets refreshed.
-                Utilities.globalQueue.postRunnable(() -> AndroidUtilities.runOnUIThread(onReady));
-            }
             return;
         }
         AtomicInteger generationCounter = FILTER_CACHE_GENERATIONS.get(account);
@@ -259,9 +249,6 @@ public final class HiddenChatsVault {
                     }
                 }
             } finally {
-                for (Long id : pendingIds) {
-                    FILTER_CACHE_PENDING.remove(filterCacheKey(id.longValue()));
-                }
                 if (onReady != null) {
                     AndroidUtilities.runOnUIThread(onReady);
                 }
