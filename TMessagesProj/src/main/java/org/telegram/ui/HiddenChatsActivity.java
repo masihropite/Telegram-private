@@ -137,6 +137,8 @@ public class HiddenChatsActivity extends BaseFragment {
         org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
                 org.telegram.messenger.NotificationCenter.updateInterfaces,
                 org.telegram.messenger.MessagesController.UPDATE_MASK_AVATAR);
+        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
+                org.telegram.messenger.NotificationCenter.reloadDialogPhotos);
     }
 
     private void requestPassword() {
