@@ -254,7 +254,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             HintDialogCell cell = (HintDialogCell) holder.itemView;
 
-            TLRPC.TL_topPeer peer = MediaDataController.getInstance(currentAccount).hints.get(position);
+            TLRPC.TL_topPeer peer = getVisiblePeer(position);
+            if (peer == null) {
+                return;
+            }
             TLRPC.Dialog dialog = new TLRPC.TL_dialog();
             TLRPC.Chat chat = null;
             TLRPC.User user = null;
@@ -279,9 +282,41 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             cell.setDialog(did, true, name);
         }
 
+        private boolean isHiddenPeer(TLRPC.TL_topPeer peer) {
+            if (peer == null || peer.peer == null) return false;
+            long dialogId = 0;
+            if (peer.peer.user_id != 0) {
+                dialogId = peer.peer.user_id;
+            } else if (peer.peer.channel_id != 0) {
+                dialogId = -peer.peer.channel_id;
+            } else if (peer.peer.chat_id != 0) {
+                dialogId = -peer.peer.chat_id;
+            }
+            return dialogId != 0 && new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
+                    .isDialogHiddenForFiltering(dialogId);
+        }
+
+        private TLRPC.TL_topPeer getVisiblePeer(int position) {
+            int visiblePosition = 0;
+            ArrayList<TLRPC.TL_topPeer> hints = MediaDataController.getInstance(currentAccount).hints;
+            for (int i = 0; i < hints.size(); i++) {
+                TLRPC.TL_topPeer peer = hints.get(i);
+                if (!isHiddenPeer(peer)) {
+                    if (visiblePosition == position) return peer;
+                    visiblePosition++;
+                }
+            }
+            return null;
+        }
+
         @Override
         public int getItemCount() {
-            return MediaDataController.getInstance(currentAccount).hints.size();
+            int count = 0;
+            ArrayList<TLRPC.TL_topPeer> hints = MediaDataController.getInstance(currentAccount).hints;
+            for (int i = 0; i < hints.size(); i++) {
+                if (!isHiddenPeer(hints.get(i))) count++;
+            }
+            return count;
         }
     }
 

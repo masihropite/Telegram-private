@@ -2916,6 +2916,34 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         return hiddenChatsMode;
     }
 
+    private void openHiddenChatPicker() {
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault();
+        if (vault == null || !vault.isUnlocked()) {
+            Toast.makeText(getParentActivity(), "ابتدا گفتگوهای مخفی را باز کنید", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Bundle args = new Bundle();
+        args.putBoolean("onlySelect", true);
+        args.putInt("dialogsType", DIALOGS_TYPE_WIDGET);
+        DialogsActivity picker = new DialogsActivity(args);
+        picker.setDelegate((fragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
+            try {
+                for (MessagesStorage.TopicKey key : dids) {
+                    if (key.topicId == 0) {
+                        vault.hideDialog(key.dialogId);
+                        NotificationsController.getInstance(currentAccount).removeNotificationsForDialog(key.dialogId);
+                    }
+                }
+                NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogsNeedReload);
+                fragment.finishFragment();
+            } catch (Exception e) {
+                Toast.makeText(getParentActivity(), "مخفی‌کردن گفتگوی انتخاب‌شده انجام نشد", Toast.LENGTH_LONG).show();
+            }
+            return true;
+        });
+        presentFragment(picker);
+    }
+
     public static void loadDialogs(AccountInstance accountInstance) {
         int currentAccount = accountInstance.getCurrentAccount();
         if (!dialogsLoaded[currentAccount]) {
@@ -4696,6 +4724,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         floatingButton3 = new FragmentFloatingButton(context, resourceProvider);
         contentView.addView(floatingButton3, FragmentFloatingButton.createDefaultLayoutParams());
         floatingButton3.setOnClickListener(v -> {
+            if (hiddenChatsMode) {
+                openHiddenChatPicker();
+                return;
+            }
             if (parentLayout != null && parentLayout.isInPreviewMode()) {
                 finishPreviewFragment();
                 return;
