@@ -336,8 +336,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
                 hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
             } else {
-                hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
-                        .isDialogHiddenForFiltering(dialogId);
+                HiddenChatsVault vault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
+                prepareHiddenDialogFilter(vault, dialogId);
+                hidden = vault.isDialogHiddenForFiltering(dialogId);
             }
             if (hiddenMode ? !hidden : hidden) return false;
         }
@@ -1507,10 +1508,23 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) recent).id);
             }
         }
-        if (dialogId != 0 && new HiddenChatsVault(mContext, currentAccount).isDialogHiddenForFiltering(dialogId)) {
-            return null;
+        if (dialogId != 0) {
+            HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
+            prepareHiddenDialogFilter(vault, dialogId);
+            if (vault.isDialogHiddenForFiltering(dialogId)) {
+                return null;
+            }
         }
         return object;
+    }
+
+    private void prepareHiddenDialogFilter(HiddenChatsVault vault, long dialogId) {
+        ArrayList<Long> ids = new ArrayList<>(1);
+        ids.add(dialogId);
+        vault.prepareDialogFilterCache(ids, () -> {
+            filterRecent(lastSearchText != null ? lastSearchText.trim() : null);
+            notifyDataSetChanged();
+        });
     }
 
     public Object getItem(int i) {
