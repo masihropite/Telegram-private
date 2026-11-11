@@ -930,8 +930,13 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 if (user != null && user.self && user.photo != null) {
                     boolean hideCurrentPhoto = user.photo.personal ? hidePrivatePhoto : hidePublicPhoto;
                     if (hideCurrentPhoto) {
-                        final long hiddenPhotoId = user.photo.photo_id;
-                        arrayList.removeIf(photo -> photo != null && photo.id == hiddenPhotoId);
+                        long hiddenPhotoId = user.photo.photo_id;
+                        for (int i = arrayList.size() - 1; i >= 0; i--) {
+                            TLRPC.Photo item = arrayList.get(i);
+                            if (item != null && item.id == hiddenPhotoId) {
+                                arrayList.remove(i);
+                            }
+                        }
                     }
                 }
                 if (fullUser != null && fullUser.personal_photo != null && !hidePrivatePhoto) {
