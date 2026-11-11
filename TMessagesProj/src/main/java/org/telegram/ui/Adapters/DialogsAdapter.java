@@ -1677,7 +1677,14 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 TLRPC.Dialog dialog = array.get(i);
                 if (dialog != null) filterDialogIds.add(dialog.id);
             }
-            if (!hiddenFilterPreloadPending) {
+            boolean needsFilterPreload = false;
+            for (Long dialogId : filterDialogIds) {
+                if (!hiddenVault.isDialogFilterCached(dialogId)) {
+                    needsFilterPreload = true;
+                    break;
+                }
+            }
+            if (needsFilterPreload && !hiddenFilterPreloadPending) {
                 hiddenFilterPreloadPending = true;
                 hiddenVault.prepareDialogFilterCache(filterDialogIds, () -> {
                     hiddenFilterPreloadPending = false;
