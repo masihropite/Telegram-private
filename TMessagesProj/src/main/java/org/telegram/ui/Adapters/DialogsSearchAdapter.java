@@ -416,6 +416,15 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         needMessagesSearch = messagesSearch;
         dialogsType = type;
         selfUserId = UserConfig.getInstance(currentAccount).getClientUserId();
+        HiddenChatsVault filterVault = new HiddenChatsVault(context, currentAccount);
+        ArrayList<Long> existingDialogIds = new ArrayList<>();
+        for (TLRPC.Dialog dialog : MessagesController.getInstance(currentAccount).getAllDialogs()) {
+            if (dialog != null) existingDialogIds.add(dialog.id);
+        }
+        filterVault.prepareDialogFilterCache(existingDialogIds, () -> {
+            filterRecent(lastSearchText != null ? lastSearchText.trim() : null);
+            notifyDataSetChanged();
+        });
         loadRecentSearch();
         MediaDataController.getInstance(currentAccount).loadHints(true);
     }
