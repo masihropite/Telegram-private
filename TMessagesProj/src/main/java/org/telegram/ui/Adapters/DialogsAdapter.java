@@ -1651,9 +1651,6 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             return;
         }
 
-        itemInternals.clear();
-        updateHasHints();
-
         MessagesController messagesController = MessagesController.getInstance(currentAccount);
 
         ArrayList<TLRPC.Dialog> array;
@@ -1667,10 +1664,29 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             if (array == null) array = new ArrayList<>();
         }
 
-        // Hidden chats are filtered from every normal folder and shown only
-        // in the dedicated native Telegram-style list.
-        if (!isOnlySelect && array != null) {
-            HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+        // Prepare the keyed privacy tokens off the UI thread before filtering.
+        // This also applies to only-select lists (for example, folder pickers),
+        // so hidden conversations cannot be added to folders through a picker.
+        HiddenChatsVault hiddenVault = null;
+        if (!hiddenChatsMode && array != null) {
+            hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+            ArrayList<Long> dialogIds = new ArrayList<>(array.size());
+            for (TLRPC.Dialog dialog : array) {
+                if (dialog != null) {
+                    dialogIds.add(dialog.id);
+                }
+            }
+            if (!hiddenVault.prepareFilterTokens(dialogIds, () -> updateList(null))) {
+                return;
+            }
+        }
+
+        itemInternals.clear();
+        updateHasHints();
+
+        // Hidden chats are filtered from every normal folder and selection
+        // picker, and are shown only in the dedicated hidden-chat list.
+        if (array != null) {
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);
@@ -1678,7 +1694,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 boolean hidden;
                 if (hiddenChatsMode) {
                     HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
-                    hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialog.id);
+                    hidden = activeVault == null || !activeVault.isUnlocked() || activeVault.isDialogHidden(dialog.id);
                 } else {
                     hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
                 }
