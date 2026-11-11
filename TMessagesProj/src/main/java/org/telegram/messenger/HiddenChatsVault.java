@@ -35,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.Cipher;
@@ -213,9 +214,23 @@ public final class HiddenChatsVault {
             return;
         }
         final ArrayList<Long> pendingIds = new ArrayList<>();
+        final ArrayList<String> missingKeys = new ArrayList<>();
+        final Set<String> seenKeys = new LinkedHashSet<>();
         for (Long id : dialogIds) {
             if (id == null) continue;
-            if (!FILTER_CACHE.containsKey(filterCacheKey(id.longValue()))) {
+            String key = filterCacheKey(id.longValue());
+            if (!seenKeys.add(key) || FILTER_CACHE.containsKey(key)) continue;
+            missingKeys.add(key);
+            if (onReady != null) {
+                CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.get(key);
+                if (waiters == null) {
+                    CopyOnWriteArrayList<Runnable> created = new CopyOnWriteArrayList<>();
+                    CopyOnWriteArrayList<Runnable> existing = FILTER_CACHE_WAITERS.putIfAbsent(key, created);
+                    waiters = existing == null ? created : existing;
+                }
+                waiters.addIfAbsent(onReady);
+            }
+            if (FILTER_CACHE_PENDING.add(key)) {
                 pendingIds.add(id);
             }
         }
@@ -232,25 +247,38 @@ public final class HiddenChatsVault {
         final int generation = expectedGeneration.get();
         Utilities.globalQueue.postRunnable(() -> {
             try {
-                Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-                Set<String> tokens = storedTokens == null
-                        ? Collections.<String>emptySet()
-                        : new LinkedHashSet<String>(storedTokens);
+                Set<String> tokens;
+                try {
+                    Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                    tokens = storedTokens == null
+                            ? Collections.<String>emptySet()
+                            : new LinkedHashSet<String>(storedTokens);
+                } catch (Exception e) {
+                    tokens = null;
+                }
                 for (Long id : pendingIds) {
-                    boolean hidden;
-                    try {
-                        hidden = tokens.contains(dialogToken(id.longValue()));
-                    } catch (Exception e) {
-                        // Fail closed on cryptographic errors.
-                        hidden = true;
+                    boolean hidden = tokens == null;
+                    if (tokens != null) {
+                        try {
+                            hidden = tokens.contains(dialogToken(id.longValue()));
+                        } catch (Exception e) {
+                            hidden = true;
+                        }
                     }
                     if (expectedGeneration.get() == generation) {
                         FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
                     }
                 }
             } finally {
-                if (onReady != null) {
-                    AndroidUtilities.runOnUIThread(onReady);
+                for (Long id : pendingIds) {
+                    String key = filterCacheKey(id.longValue());
+                    FILTER_CACHE_PENDING.remove(key);
+                    CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
+                    if (waiters != null) {
+                        for (Runnable waiter : waiters) {
+                            waiter.run();
+                        }
+                    }
                 }
             }
         });
