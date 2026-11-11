@@ -52,6 +52,15 @@ public final class LocalProfilePhotoVisibility {
         return true;
     }
 
+    public static boolean shouldHidePublicPhoto(int account, TLRPC.Photo photo) {
+        if (photo == null || !isPublicHidden(account)) {
+            return false;
+        }
+        long selfId = UserConfig.getInstance(account).getClientUserId();
+        TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(selfId);
+        return full != null && full.fallback_photo != null && full.fallback_photo.id == photo.id;
+    }
+
     /**
      * Returns true only for the current account's own avatar. Other users'
      * photos are never affected by these local preferences.
