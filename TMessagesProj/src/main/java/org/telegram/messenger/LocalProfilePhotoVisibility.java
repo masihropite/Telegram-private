@@ -72,17 +72,20 @@ public final class LocalProfilePhotoVisibility {
         }
 
         TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
-        if (full != null) {
-            if (full.fallback_photo != null && full.fallback_photo.id == user.photo.photo_id) {
-                return isPublicHidden(account);
-            }
-            if (full.profile_photo != null && full.profile_photo.id == user.photo.photo_id) {
-                return isPrivateHidden(account);
-            }
-            if (full.personal_photo != null && full.personal_photo.id == user.photo.photo_id) {
-                return isPrivateHidden(account);
-            }
+        if (full == null) {
+            // Do not guess which photo Telegram supplied before the full
+            // profile metadata has arrived; guessing could hide the wrong one.
+            return false;
         }
-        return isPrivateHidden(account);
+        if (full.fallback_photo != null && full.fallback_photo.id == user.photo.photo_id) {
+            return isPublicHidden(account);
+        }
+        if (full.profile_photo != null && full.profile_photo.id == user.photo.photo_id) {
+            return isPrivateHidden(account);
+        }
+        if (full.personal_photo != null && full.personal_photo.id == user.photo.photo_id) {
+            return isPrivateHidden(account);
+        }
+        return false;
     }
 }
