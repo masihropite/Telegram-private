@@ -159,6 +159,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
+                    org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
                 } else {
                     requestPasswordConfirmation(entered.clone());
@@ -193,6 +194,7 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
+                        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                         refreshRows();
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
