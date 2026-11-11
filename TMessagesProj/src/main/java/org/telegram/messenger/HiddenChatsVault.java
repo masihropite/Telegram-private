@@ -8,6 +8,7 @@
 package org.telegram.messenger;
 
 import android.content.Context;
+import android.os.Looper;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
@@ -278,6 +279,17 @@ public final class HiddenChatsVault {
 
     public boolean isDialogHiddenForFiltering(long dialogId) {
         String token = FILTER_TOKEN_CACHE.get(dialogId);
+        if (token == null && Looper.myLooper() != Looper.getMainLooper()) {
+            // Search results are sometimes filtered on Telegram's search queue.
+            // It is safe to do the first token calculation there, never on main.
+            try {
+                token = dialogToken(dialogId);
+                FILTER_TOKEN_CACHE.put(dialogId, token);
+            } catch (Exception e) {
+                FILTER_TOKEN_CACHE.put(dialogId, FILTER_TOKEN_FAILED);
+                FileLog.e(e);
+            }
+        }
         if (token == null || FILTER_TOKEN_FAILED.equals(token)) {
             return true;
         }
