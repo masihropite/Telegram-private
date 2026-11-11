@@ -3,6 +3,8 @@ package org.telegram.messenger;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import org.telegram.tgnet.TLRPC;
+
 /**
  * Device-local visibility switches for the current account's public/private
  * profile photos. These settings never modify Telegram server profile data.
