@@ -80,10 +80,32 @@ public class HiddenChatsActivity extends BaseFragment {
         });
         content.addView(lock, new LinearLayout.LayoutParams(-1, -2));
 
+        Button showHidden = new Button(context);
+        showHidden.setText("مشاهده گفتگوهای مخفی");
+        showHidden.setOnClickListener(v -> {
+            if (vault.isUnlocked()) {
+                openHiddenDialogs();
+            } else {
+                Toast.makeText(getParentActivity(), "ابتدا بخش گفتگوهای مخفی را باز کنید", Toast.LENGTH_SHORT).show();
+            }
+        });
+        content.addView(showHidden, new LinearLayout.LayoutParams(-1, -2));
+
         Button add = new Button(context);
-        add.setText("مخفی کردن گفتگوها");
+        add.setText("افزودن گفتگو");
+        add.setGravity(Gravity.CENTER);
         add.setOnClickListener(v -> openChatPicker());
         content.addView(add, new LinearLayout.LayoutParams(-1, -2));
+
+        Button privatePhoto = new Button(context);
+        updateProfilePhotoButton(privatePhoto, true);
+        privatePhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(true, privatePhoto));
+        content.addView(privatePhoto, new LinearLayout.LayoutParams(-1, -2));
+
+        Button publicPhoto = new Button(context);
+        updateProfilePhotoButton(publicPhoto, false);
+        publicPhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(false, publicPhoto));
+        content.addView(publicPhoto, new LinearLayout.LayoutParams(-1, -2));
 
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
@@ -95,6 +117,32 @@ public class HiddenChatsActivity extends BaseFragment {
 
     private static int dp(Context context, float value) {
         return (int) (value * context.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void updateProfilePhotoButton(Button button, boolean privatePhoto) {
+        boolean hidden = privatePhoto
+                ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+        String kind = privatePhoto ? "خصوصی" : "عمومی";
+        button.setText((hidden ? "نمایش عکس " : "مخفی‌کردن عکس ") + kind);
+    }
+
+    private void toggleProfilePhotoVisibility(boolean privatePhoto, Button button) {
+        boolean current = privatePhoto
+                ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+        boolean saved = org.telegram.messenger.LocalProfilePhotoSettings.setHidden(
+                ApplicationLoader.applicationContext, currentAccount, privatePhoto, !current);
+        if (!saved) {
+            Toast.makeText(getParentActivity(),
+                    "برای اینکه حداقل یک عکس قابل مشاهده بماند، ابتدا عکس دیگر را نمایش دهید.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        updateProfilePhotoButton(button, privatePhoto);
+        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
+                org.telegram.messenger.NotificationCenter.updateInterfaces,
+                org.telegram.messenger.MessagesController.UPDATE_MASK_AVATAR);
     }
 
     private void requestPassword() {
@@ -117,7 +165,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
-                    openHiddenDialogs();
+                    refreshRows();
                 } else {
                     requestPasswordConfirmation(entered.clone());
                     dialog.dismiss();
@@ -151,7 +199,7 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
-                        openHiddenDialogs();
+                        refreshRows();
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
                     } finally {
@@ -213,8 +261,12 @@ public class HiddenChatsActivity extends BaseFragment {
                     vault.unhideDialog(dialogId);
                     org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
-                } catch (GeneralSecurityException e) {
-                    Toast.makeText(getParentActivity(), "نمایش دوباره گفتگو انجام نشد", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    String message = e instanceof IllegalStateException
+                            ? "فضای گفتگوهای مخفی قفل است؛ ابتدا آن را باز کنید."
+                            : "نمایش دوباره گفتگو انجام نشد.";
+                    Toast.makeText(getParentActivity(), message, Toast.LENGTH_LONG).show();
+                    refreshRows();
                 }
             });
             line.addView(restore, new LinearLayout.LayoutParams(-2, -2));
@@ -242,11 +294,15 @@ public class HiddenChatsActivity extends BaseFragment {
         DialogsActivity picker = new DialogsActivity(args);
         picker.setDelegate((fragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
             try {
+                ArrayList<Long> selectedDialogIds = new ArrayList<>();
                 for (MessagesStorage.TopicKey key : dids) {
                     if (key.topicId == 0) {
-                        vault.hideDialog(key.dialogId);
-                        org.telegram.messenger.NotificationsController.getInstance(currentAccount).removeNotificationsForDialog(key.dialogId);
+                        selectedDialogIds.add(key.dialogId);
                     }
+                }
+                vault.hideDialogs(selectedDialogIds);
+                for (Long dialogId : selectedDialogIds) {
+                    org.telegram.messenger.NotificationsController.getInstance(currentAccount).removeNotificationsForDialog(dialogId);
                 }
                 org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                 fragment.finishFragment();

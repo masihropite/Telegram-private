@@ -61,6 +61,7 @@ public class SpoilerEffectBitmapFactory {
         if (bitmapBuffers[0] == null) {
             bitmapBuffers[0] = new Buffer(size);
             shaderPaint = new Paint();
+            shaderPaint.setShader(bitmapBuffers[0].shader);
             shaderSpoilerEffects = new ArrayList<>(10 * 10);
             int step = (int) (size / 10f);
             int particleCount = (int) (60 * (size / (float) AndroidUtilities.dp(200)));
@@ -68,26 +69,35 @@ public class SpoilerEffectBitmapFactory {
                 for (int j = 0; j < 10; j++) {
                     SpoilerEffect shaderSpoilerEffect = new SpoilerEffect();
                     shaderSpoilerEffect.setSize(size);
-                    shaderSpoilerEffect.setBounds(step * i, step * j - AndroidUtilities.dp(5), step * i + step +  AndroidUtilities.dp(3), step * j + step + AndroidUtilities.dp(5));
+                    shaderSpoilerEffect.setBounds(step * i, step * j - AndroidUtilities.dp(5), step * i + step + AndroidUtilities.dp(3), step * j + step + AndroidUtilities.dp(5));
                     shaderSpoilerEffect.setMaxParticlesCount(Math.min(SpoilerEffect.MAX_PARTICLES_PER_ENTITY * 5, particleCount));
                     shaderSpoilerEffect.setColor(Color.WHITE);
                     shaderSpoilerEffects.add(shaderSpoilerEffect);
                 }
             }
-            doDraw(new Canvas(bitmapBuffers[0].bitmap), new Rect(0, 0, size, size));
-            shaderPaint.setShader(bitmapBuffers[0].shader);
-            lastUpdateTime = System.currentTimeMillis();
-        } else if (isDrawnWithClipRegion && !LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
-            // restore full-drawn texture
-
-            currentBitmapBuffer = 0;
-            doDraw(new Canvas(bitmapBuffers[0].bitmap), new Rect(0, 0, size, size));
-            shaderPaint.setShader(bitmapBuffers[0].shader);
-            lastUpdateTime = System.currentTimeMillis();
-            isDrawnWithClipRegion = false;
+            // The initial particle simulation is expensive; never run it from View.draw().
+            isRunning = true;
+            dispatchQueue.postRunnable(() -> {
+                doDraw(new Canvas(bitmapBuffers[0].bitmap), new Rect(0, 0, size, size));
+                AndroidUtilities.runOnUIThread(() -> {
+                    lastUpdateTime = System.currentTimeMillis();
+                    isRunning = false;
+                });
+            });
+        } else if (isDrawnWithClipRegion && !LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER) && !isRunning) {
+            // Rebuild the full texture on the worker queue, not on the UI thread.
+            isRunning = true;
+            dispatchQueue.postRunnable(() -> {
+                doDraw(new Canvas(bitmapBuffers[0].bitmap), new Rect(0, 0, size, size));
+                AndroidUtilities.runOnUIThread(() -> {
+                    currentBitmapBuffer = 0;
+                    shaderPaint.setShader(bitmapBuffers[0].shader);
+                    lastUpdateTime = System.currentTimeMillis();
+                    isRunning = false;
+                    isDrawnWithClipRegion = false;
+                });
+            });
         }
-
-
         return shaderPaint;
     }
 

@@ -148,6 +148,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     private DialogsActivity parentFragment;
     private boolean isTransitionSupport;
+    private boolean hiddenFilterPreloadPending;
 
     private TLRPC.RequestPeerType requestPeerType;
     public boolean isEmpty;
@@ -1671,6 +1672,25 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         // in the dedicated native Telegram-style list.
         if (array != null) {
             HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
+            ArrayList<Long> filterDialogIds = new ArrayList<>(array.size());
+            for (int i = 0; i < array.size(); i++) {
+                TLRPC.Dialog dialog = array.get(i);
+                if (dialog != null) filterDialogIds.add(dialog.id);
+            }
+            boolean needsFilterPreload = false;
+            for (Long dialogId : filterDialogIds) {
+                if (!hiddenVault.isDialogFilterCached(dialogId)) {
+                    needsFilterPreload = true;
+                    break;
+                }
+            }
+            if (needsFilterPreload && !hiddenFilterPreloadPending) {
+                hiddenFilterPreloadPending = true;
+                hiddenVault.prepareDialogFilterCache(filterDialogIds, () -> {
+                    hiddenFilterPreloadPending = false;
+                    notifyDataSetChanged();
+                });
+            }
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
             for (int i = 0; i < array.size(); i++) {
                 TLRPC.Dialog dialog = array.get(i);

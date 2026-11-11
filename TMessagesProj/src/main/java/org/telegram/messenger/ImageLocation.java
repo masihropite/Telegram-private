@@ -164,9 +164,34 @@ public class ImageLocation {
         return getForUser(UserConfig.selectedAccount, user, type);
     }
 
+    private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type, boolean hiddenPhotoIsPrivate) {
+        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL || type == TYPE_STRIPPED) {
+            return null;
+        }
+        TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
+        if (userFull == null) {
+            return null;
+        }
+        TLRPC.Photo alternatePhoto = hiddenPhotoIsPrivate ? userFull.fallback_photo : userFull.personal_photo;
+        if (alternatePhoto == null || alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
+            return null;
+        }
+        int targetSize = type == TYPE_BIG ? 1000 : 100;
+        TLRPC.PhotoSize photoSize = FileLoader.getClosestPhotoSizeWithSize(alternatePhoto.sizes, targetSize);
+        return photoSize == null ? null : ImageLocation.getForPhoto(photoSize, alternatePhoto);
+    }
+
     public static ImageLocation getForUser(int currentAccount, TLRPC.User user, int type) {
         if (user == null || user.photo == null) {
             return null;
+        }
+        if (user.id == UserConfig.getInstance(currentAccount).getClientUserId()) {
+            boolean hidePhoto = user.photo.personal
+                    ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                    : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+            if (hidePhoto) {
+                return getForOwnAlternateProfilePhoto(currentAccount, user, type, user.photo.personal);
+            }
         }
         if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             if (MessagesController.getInstance(currentAccount).isPremiumUser(user) && user.photo.has_video) {

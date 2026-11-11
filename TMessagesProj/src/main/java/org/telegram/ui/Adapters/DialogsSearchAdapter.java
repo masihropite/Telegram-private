@@ -182,6 +182,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     private int currentItemCount;
     private int folderId;
     private ArrayList<ContactEntry> allContacts;
+    private final HashSet<Long> hiddenFilterRequests = new HashSet<>();
 
     public void setFilterDialogIds(ArrayList<Long> filterDialogIds) {
         this.filterDialogIds = filterDialogIds;
@@ -336,8 +337,12 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
                 hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialogId);
             } else {
-                hidden = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount)
-                        .isDialogHiddenForFiltering(dialogId);
+                HiddenChatsVault vault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
+                prepareHiddenDialogFilter(vault, dialogId);
+                // Keep uncached global results temporarily; getItem() hides them
+                // until the background check completes, then refreshes the row.
+                hidden = vault.isDialogFilterCached(dialogId)
+                        && vault.isDialogHiddenForFiltering(dialogId);
             }
             if (hiddenMode ? !hidden : hidden) return false;
         }
@@ -415,6 +420,15 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         needMessagesSearch = messagesSearch;
         dialogsType = type;
         selfUserId = UserConfig.getInstance(currentAccount).getClientUserId();
+        HiddenChatsVault filterVault = new HiddenChatsVault(context, currentAccount);
+        ArrayList<Long> existingDialogIds = new ArrayList<>();
+        for (TLRPC.Dialog dialog : MessagesController.getInstance(currentAccount).getAllDialogs()) {
+            if (dialog != null) existingDialogIds.add(dialog.id);
+        }
+        filterVault.prepareDialogFilterCache(existingDialogIds, () -> {
+            filterRecent(lastSearchText != null ? lastSearchText.trim() : null);
+            notifyDataSetChanged();
+        });
         loadRecentSearch();
         MediaDataController.getInstance(currentAccount).loadHints(true);
     }
@@ -1507,10 +1521,35 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) recent).id);
             }
         }
-        if (dialogId != 0 && new HiddenChatsVault(mContext, currentAccount).isDialogHiddenForFiltering(dialogId)) {
-            return null;
+        if (dialogId != 0) {
+            boolean hiddenMode = dialogsActivity != null && dialogsActivity.isHiddenChatsMode();
+            if (hiddenMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                if (activeVault == null || !activeVault.isUnlocked() || !activeVault.isDialogHidden(dialogId)) {
+                    return null;
+                }
+            } else {
+                HiddenChatsVault vault = new HiddenChatsVault(mContext, currentAccount);
+                prepareHiddenDialogFilter(vault, dialogId);
+                if (vault.isDialogHiddenForFiltering(dialogId)) {
+                    return null;
+                }
+            }
         }
         return object;
+    }
+
+    private void prepareHiddenDialogFilter(HiddenChatsVault vault, long dialogId) {
+        if (vault.isDialogFilterCached(dialogId) || !hiddenFilterRequests.add(dialogId)) {
+            return;
+        }
+        ArrayList<Long> ids = new ArrayList<>(1);
+        ids.add(dialogId);
+        vault.prepareDialogFilterCache(ids, () -> {
+            hiddenFilterRequests.remove(dialogId);
+            filterRecent(lastSearchText != null ? lastSearchText.trim() : null);
+            notifyDataSetChanged();
+        });
     }
 
     public Object getItem(int i) {

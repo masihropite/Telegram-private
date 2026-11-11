@@ -12945,6 +12945,7 @@ public class MessagesStorage extends BaseController {
                         state_media.bindInteger(4, MediaDataController.getMediaType(message));
                         state_media.bindByteBuffer(5, data);
                         state_media.step();
+                        state_media.dispose();
                         state_media = null;
 
                         if (topicId != 0) {
@@ -16788,8 +16789,14 @@ public class MessagesStorage extends BaseController {
                         state_messages_tags.dispose();
                         state_messages_tags = null;
                     }
-                    state_media.dispose();
-                    state_media = null;
+                    if (state_media != null) {
+                        state_media.dispose();
+                        state_media = null;
+                    }
+                    if (state_media_topics != null) {
+                        state_media_topics.dispose();
+                        state_media_topics = null;
+                    }
                     if (state_webpage != null) {
                         state_webpage.dispose();
                         state_webpage = null;
@@ -16861,6 +16868,9 @@ public class MessagesStorage extends BaseController {
                 }
                 if (state_media != null) {
                     state_media.dispose();
+                }
+                if (state_media_topics != null) {
+                    state_media_topics.dispose();
                 }
                 if (state_polls != null) {
                     state_polls.dispose();

@@ -11,6 +11,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
+import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.Utilities;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -31,6 +34,9 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKeyFactory;
@@ -61,8 +67,15 @@ public final class HiddenChatsVault {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
     private static volatile HiddenChatsVault activeVault;
+    private static final Object FILTER_CACHE_LOCK = new Object();
+    private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
+    private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
+    private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private static final ConcurrentHashMap<String, CopyOnWriteArrayList<Runnable>> FILTER_CACHE_WAITERS = new ConcurrentHashMap<String, CopyOnWriteArrayList<Runnable>>();
+    private static final ConcurrentHashMap<Integer, AtomicInteger> FILTER_CACHE_GENERATIONS = new ConcurrentHashMap<Integer, AtomicInteger>();
 
     private final SharedPreferences preferences;
+    private final int account;
     private final Set<Long> hiddenDialogIds = new LinkedHashSet<Long>();
 
     private byte[] salt;
@@ -76,6 +89,7 @@ public final class HiddenChatsVault {
         if (context == null) {
             throw new IllegalArgumentException("Context must not be null");
         }
+        this.account = account;
         preferences = context.getApplicationContext().getSharedPreferences(
                 PREFS_NAME + "_" + account, Context.MODE_PRIVATE);
     }
@@ -195,14 +209,124 @@ public final class HiddenChatsVault {
      * Checks hidden state without unlocking. Only one-way HMAC tokens are
      * persisted, allowing the main chat list to remain filtered while locked.
      */
-    public synchronized boolean isDialogHiddenForFiltering(long dialogId) {
-        try {
-            String token = dialogToken(dialogId);
-            Set<String> tokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-            return tokens != null && tokens.contains(token);
-        } catch (Exception e) {
-            // Fail closed: a keystore failure must not reveal hidden chats.
-            return true;
+    /**
+     * Schedules HMAC checks away from the UI thread. Until a result is ready,
+     * unknown dialogs are treated as hidden so a locked vault never leaks them.
+     */
+    public void prepareDialogFilterCache(List<Long> dialogIds, Runnable onReady) {
+        if (dialogIds == null || dialogIds.isEmpty()) {
+            return;
+        }
+        final ArrayList<Long> pendingIds = new ArrayList<>();
+        final ArrayList<String> missingKeys = new ArrayList<>();
+        synchronized (FILTER_CACHE_LOCK) {
+            final Set<String> seenKeys = new LinkedHashSet<>();
+            for (Long id : dialogIds) {
+                if (id == null) continue;
+                String key = filterCacheKey(id.longValue());
+                if (!seenKeys.add(key) || FILTER_CACHE.containsKey(key)) continue;
+                missingKeys.add(key);
+                if (FILTER_CACHE_PENDING.add(key)) {
+                    pendingIds.add(id);
+                }
+            }
+            if (onReady != null && !missingKeys.isEmpty()) {
+                final AtomicInteger remaining = new AtomicInteger(missingKeys.size());
+                Runnable readyCallback = () -> {
+                    if (remaining.decrementAndGet() == 0) {
+                        AndroidUtilities.runOnUIThread(onReady);
+                    }
+                };
+                for (String key : missingKeys) {
+                    CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.get(key);
+                    if (waiters == null) {
+                        CopyOnWriteArrayList<Runnable> created = new CopyOnWriteArrayList<>();
+                        CopyOnWriteArrayList<Runnable> existing = FILTER_CACHE_WAITERS.putIfAbsent(key, created);
+                        waiters = existing == null ? created : existing;
+                    }
+                    waiters.add(readyCallback);
+                }
+            }
+        }
+        if (pendingIds.isEmpty()) {
+            return;
+        }
+        AtomicInteger generationCounter = FILTER_CACHE_GENERATIONS.get(account);
+        if (generationCounter == null) {
+            AtomicInteger created = new AtomicInteger();
+            AtomicInteger existing = FILTER_CACHE_GENERATIONS.putIfAbsent(account, created);
+            generationCounter = existing == null ? created : existing;
+        }
+        final AtomicInteger expectedGeneration = generationCounter;
+        final int generation = expectedGeneration.get();
+        Utilities.globalQueue.postRunnable(() -> {
+            try {
+                Set<String> tokens;
+                try {
+                    Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                    tokens = storedTokens == null
+                            ? Collections.<String>emptySet()
+                            : new LinkedHashSet<String>(storedTokens);
+                } catch (Exception e) {
+                    tokens = null;
+                }
+                for (Long id : pendingIds) {
+                    boolean hidden = tokens == null;
+                    if (tokens != null) {
+                        try {
+                            String token = dialogToken(id.longValue());
+                            FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
+                            hidden = tokens.contains(token);
+                        } catch (Exception e) {
+                            hidden = true;
+                        }
+                    }
+                    synchronized (FILTER_CACHE_LOCK) {
+                        if (expectedGeneration.get() == generation) {
+                            FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                        }
+                    }
+                }
+            } finally {
+                ArrayList<Runnable> callbacks = new ArrayList<>();
+                synchronized (FILTER_CACHE_LOCK) {
+                    for (Long id : pendingIds) {
+                        String key = filterCacheKey(id.longValue());
+                        FILTER_CACHE_PENDING.remove(key);
+                        CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
+                        if (waiters != null) callbacks.addAll(waiters);
+                    }
+                }
+                for (Runnable callback : callbacks) {
+                    callback.run();
+                }
+            }
+        });
+    }
+
+    public boolean isDialogFilterCached(long dialogId) {
+        return FILTER_CACHE.containsKey(filterCacheKey(dialogId));
+    }
+
+    public boolean isDialogHiddenForFiltering(long dialogId) {
+        Boolean hidden = FILTER_CACHE.get(filterCacheKey(dialogId));
+        return hidden == null || hidden;
+    }
+
+    private String filterCacheKey(long dialogId) {
+        return account + ":" + dialogId;
+    }
+
+    private void invalidateFilterCache() {
+        synchronized (FILTER_CACHE_LOCK) {
+            AtomicInteger generation = FILTER_CACHE_GENERATIONS.get(account);
+            if (generation != null) generation.incrementAndGet();
+            String prefix = account + ":";
+            for (String key : FILTER_CACHE.keySet()) {
+                if (key.startsWith(prefix)) {
+                    FILTER_CACHE.remove(key);
+                }
+            }
         }
     }
 
@@ -212,14 +336,43 @@ public final class HiddenChatsVault {
             throw new IllegalArgumentException("Dialog ID must not be zero");
         }
         if (hiddenDialogIds.add(dialogId)) {
-            persist();
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.remove(dialogId);
+                throw e;
+            }
+        }
+    }
+
+    public synchronized void hideDialogs(List<Long> dialogIds) throws GeneralSecurityException {
+        requireUnlocked();
+        if (dialogIds == null || dialogIds.isEmpty()) return;
+        ArrayList<Long> added = new ArrayList<>();
+        for (Long id : dialogIds) {
+            if (id != null && id.longValue() != 0 && hiddenDialogIds.add(id)) {
+                added.add(id);
+            }
+        }
+        if (!added.isEmpty()) {
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.removeAll(added);
+                throw e;
+            }
         }
     }
 
     public synchronized void unhideDialog(long dialogId) throws GeneralSecurityException {
         requireUnlocked();
         if (hiddenDialogIds.remove(dialogId)) {
-            persist();
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                hiddenDialogIds.add(dialogId);
+                throw e;
+            }
         }
     }
 
@@ -239,7 +392,13 @@ public final class HiddenChatsVault {
 
         Set<String> filterTokens = new LinkedHashSet<String>();
         for (Long id : hiddenDialogIds) {
-            filterTokens.add(dialogToken(id.longValue()));
+            String cacheKey = filterCacheKey(id.longValue());
+            String token = FILTER_TOKEN_CACHE.get(cacheKey);
+            if (token == null) {
+                token = dialogToken(id.longValue());
+                FILTER_TOKEN_CACHE.put(cacheKey, token);
+            }
+            filterTokens.add(token);
         }
         boolean saved = preferences.edit()
                 .putString(KEY_PAYLOAD, Base64.encodeToString(payload.array(), Base64.NO_WRAP))
@@ -248,6 +407,7 @@ public final class HiddenChatsVault {
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
         }
+        invalidateFilterCache();
     }
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
