@@ -2953,6 +2953,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         args.putBoolean("onlySelect", true);
         args.putInt("dialogsType", DIALOGS_TYPE_WIDGET);
         DialogsActivity picker = new DialogsActivity(args);
+        picker.setCurrentAccount(currentAccount);
         picker.setDelegate((fragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
             try {
                 for (MessagesStorage.TopicKey key : dids) {
