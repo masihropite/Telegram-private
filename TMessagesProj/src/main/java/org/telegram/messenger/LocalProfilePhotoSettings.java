@@ -3,8 +3,6 @@ package org.telegram.messenger;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import org.telegram.tgnet.TLRPC;
-
 /**
  * Device-local visibility switches for the current account's public/private
  * profile photos. These settings never modify Telegram server profile data.
@@ -30,26 +28,17 @@ public final class LocalProfilePhotoSettings {
     }
 
     /**
-     * Changes one local visibility switch. At least one of the two profile
-     * photo types must remain visible.
+     * Changes one local visibility switch. Both switches can never be enabled
+     * at the same time. Do not rely on UserFull photo metadata here because it
+     * may not have been loaded yet even when both photos are configured.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
         SharedPreferences preferences = getPreferences(context, account);
         boolean otherHidden = preferences.getBoolean(privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE, false);
-        if (hidden && (otherHidden || !hasPhoto(context, account, !privatePhoto))) {
+        if (hidden && otherHidden) {
             return false;
         }
         String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
         return preferences.edit().putBoolean(key, hidden).commit();
-    }
-
-    private static boolean hasPhoto(Context context, int account, boolean privatePhoto) {
-        TLRPC.User user = MessagesController.getInstance(account).getUser(UserConfig.getInstance(account).getClientUserId());
-        if (user == null) return false;
-        TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
-        if (privatePhoto) {
-            return user.photo != null && user.photo.personal || full != null && full.personal_photo != null;
-        }
-        return user.photo != null && !user.photo.personal || full != null && UserObject.hasFallbackPhoto(full);
     }
 }

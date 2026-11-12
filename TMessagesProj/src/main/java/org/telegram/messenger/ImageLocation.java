@@ -182,16 +182,22 @@ public class ImageLocation {
     }
 
     public static ImageLocation getForUser(int currentAccount, TLRPC.User user, int type) {
-        if (user == null || user.photo == null) {
+        if (user == null) {
             return null;
         }
-        if (user.id == UserConfig.getInstance(currentAccount).getClientUserId()) {
+        if (user.id == UserConfig.getInstance(currentAccount).getClientUserId() && user.photo != null) {
             boolean hidePhoto = user.photo.personal
                     ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
                     : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
             if (hidePhoto) {
-                return getForOwnAlternateProfilePhoto(currentAccount, user, type, user.photo.personal);
+                ImageLocation alternate = getForOwnAlternateProfilePhoto(currentAccount, user, type, user.photo.personal);
+                if (alternate != null) {
+                    return alternate;
+                }
             }
+        }
+        if (user.photo == null) {
+            return null;
         }
         if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             if (MessagesController.getInstance(currentAccount).isPremiumUser(user) && user.photo.has_video) {

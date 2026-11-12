@@ -50,6 +50,20 @@ public class DebugRecordingCanvas extends Canvas {
 
     private static final String TAG = "DebugRecordingCanvas";
 
+    /**
+     * Canvas.drawPatch is unavailable on Android 12 and older. Use a bitmap
+     * fallback there instead of invoking a framework method that does not exist.
+     */
+    private static void drawPatchCompat(Canvas canvas, NinePatch patch, Rect dst, Paint paint) {
+        if (Build.VERSION.SDK_INT >= 35) canvas.drawPatch(patch, dst, paint);
+        else canvas.drawBitmap(patch.getBitmap(), null, dst, paint);
+    }
+
+    private static void drawPatchCompat(Canvas canvas, NinePatch patch, RectF dst, Paint paint) {
+        if (Build.VERSION.SDK_INT >= 35) canvas.drawPatch(patch, dst, paint);
+        else canvas.drawBitmap(patch.getBitmap(), null, dst, paint);
+    }
+
     /** Coordinates exceeding this absolute value are flagged as suspicious. */
     private static final float COORD_WARN_THRESHOLD = 20_000f;
 
@@ -1014,8 +1028,8 @@ public class DebugRecordingCanvas extends Canvas {
         }
 
         @Override public void replay(@NonNull Canvas c) {
-            if (dstF != null) c.drawPatch(patch, dstF, paint);
-            else              c.drawPatch(patch, dst,  paint);
+            if (dstF != null) drawPatchCompat(c, patch, dstF, paint);
+            else              drawPatchCompat(c, patch, dst, paint);
         }
 
         @Override public String toString() {
@@ -1672,13 +1686,15 @@ public class DebugRecordingCanvas extends Canvas {
     @Override
     public void drawPatch(@NonNull NinePatch patch, @NonNull Rect dst, @Nullable Paint paint) {
         record(new DrawPatchCmd(patch, dst, paint));
-        super.drawPatch(patch, dst, paint);
+        if (Build.VERSION.SDK_INT >= 35) super.drawPatch(patch, dst, paint);
+        else super.drawBitmap(patch.getBitmap(), null, dst, paint);
     }
 
     @Override
     public void drawPatch(@NonNull NinePatch patch, @NonNull RectF dst, @Nullable Paint paint) {
         record(new DrawPatchCmd(patch, dst, paint));
-        super.drawPatch(patch, dst, paint);
+        if (Build.VERSION.SDK_INT >= 35) super.drawPatch(patch, dst, paint);
+        else super.drawBitmap(patch.getBitmap(), null, dst, paint);
     }
 
     @Override

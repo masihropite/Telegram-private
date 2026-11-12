@@ -270,20 +270,32 @@ public final class HiddenChatsVault {
                 } catch (Exception e) {
                     tokens = null;
                 }
-                for (Long id : pendingIds) {
-                    boolean hidden = tokens == null;
-                    if (tokens != null) {
-                        try {
-                            String token = dialogToken(id.longValue());
-                            FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
-                            hidden = tokens.contains(token);
-                        } catch (Exception e) {
-                            hidden = true;
-                        }
-                    }
+                if (tokens != null && tokens.isEmpty()) {
+                    // No hidden chats: populate the visible cache without
+                    // invoking Android Keystore once per dialog on startup.
                     synchronized (FILTER_CACHE_LOCK) {
                         if (expectedGeneration.get() == generation) {
-                            FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                            for (Long id : pendingIds) {
+                                FILTER_CACHE.put(filterCacheKey(id.longValue()), false);
+                            }
+                        }
+                    }
+                } else {
+                    for (Long id : pendingIds) {
+                        boolean hidden = tokens == null;
+                        if (tokens != null) {
+                            try {
+                                String token = dialogToken(id.longValue());
+                                FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
+                                hidden = tokens.contains(token);
+                            } catch (Exception e) {
+                                hidden = true;
+                            }
+                        }
+                        synchronized (FILTER_CACHE_LOCK) {
+                            if (expectedGeneration.get() == generation) {
+                                FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
+                            }
                         }
                     }
                 }

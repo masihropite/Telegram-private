@@ -341,8 +341,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 prepareHiddenDialogFilter(vault, dialogId);
                 // Keep uncached global results temporarily; getItem() hides them
                 // until the background check completes, then refreshes the row.
-                hidden = vault.isDialogFilterCached(dialogId)
-                        && vault.isDialogHiddenForFiltering(dialogId);
+                // Fail closed until the asynchronous check completes so a
+                // hidden dialog never appears in a folder/contact picker.
+                hidden = vault.isDialogHiddenForFiltering(dialogId);
             }
             if (hiddenMode ? !hidden : hidden) return false;
         }
