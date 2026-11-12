@@ -2040,6 +2040,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         @Override
         protected void onDetachedFromWindow() {
+            resetScrollInteractionState();
             super.onDetachedFromWindow();
         }
 
@@ -2188,12 +2189,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             setViewsOffset(0f);
             setScrollEnabled(true);
-        }
-
-        @Override
-        protected void onDetachedFromWindow() {
-            resetScrollInteractionState();
-            super.onDetachedFromWindow();
         }
 
         @Override
