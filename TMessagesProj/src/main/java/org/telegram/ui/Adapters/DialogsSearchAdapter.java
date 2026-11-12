@@ -372,6 +372,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     public DialogsSearchAdapter(Context context, DialogsActivity dialogsActivity, int messagesSearch, int type, DefaultItemAnimator itemAnimator, boolean allowGlobalSearch, Theme.ResourcesProvider resourcesProvider) {
         this.itemAnimator = itemAnimator;
         this.dialogsActivity = dialogsActivity;
+        this.currentAccount = dialogsActivity != null ? dialogsActivity.getCurrentAccount() : UserConfig.selectedAccount;
         this.resourcesProvider = resourcesProvider;
         searchAdapterHelper = new SearchAdapterHelper(false) {
             @Override
