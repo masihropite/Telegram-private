@@ -360,6 +360,7 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.fileLoadProgressChanged);
         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.reloadDialogPhotos);
         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.dialogPhotosUpdate);
+        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.updateInterfaces);
 
         dialogPhotos = MessagesController.getInstance(currentAccount).getDialogPhotos(dialogId);
         dialogPhotos.loadCache();
@@ -402,6 +403,7 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.fileLoadProgressChanged);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.reloadDialogPhotos);
         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.dialogPhotosUpdate);
+        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.updateInterfaces);
 
         int count = getChildCount();
         for (int a = 0; a < count; a++) {
@@ -908,6 +910,25 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
         }
     }
 
+    private static void removePhotoById(ArrayList<TLRPC.Photo> photos, long photoId) {
+        if (photos == null || photoId == 0) return;
+        for (int i = photos.size() - 1; i >= 0; i--) {
+            TLRPC.Photo photo = photos.get(i);
+            if (photo != null && photo.id == photoId) {
+                photos.remove(i);
+            }
+        }
+    }
+
+    private static boolean containsPhotoId(ArrayList<TLRPC.Photo> photos, long photoId) {
+        if (photos == null || photoId == 0) return false;
+        for (int i = 0; i < photos.size(); i++) {
+            TLRPC.Photo photo = photos.get(i);
+            if (photo != null && photo.id == photoId) return true;
+        }
+        return false;
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
@@ -915,23 +936,46 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
             MessagesController.DialogPhotos dialogPhotos = (MessagesController.DialogPhotos) args[0];
             if (this.dialogPhotos == dialogPhotos) {
                 ArrayList<TLRPC.Photo> arrayList = new ArrayList<>(dialogPhotos.photos);
-                if (arrayList.isEmpty() && dialogPhotos.fromCache) {
-                    return;
-                }
-
                 customAvatarIndex = -1;
                 fallbackPhotoIndex = -1;
                 TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
                 TLRPC.UserFull fullUser = MessagesController.getInstance(currentAccount).getUserFull(dialogId);
-                if (fullUser != null && fullUser.personal_photo != null) {
+                boolean isSelf = user != null && user.self;
+                boolean hidePrivate = isSelf && org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(
+                        org.telegram.messenger.ApplicationLoader.applicationContext, currentAccount);
+                boolean hidePublic = isSelf && org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(
+                        org.telegram.messenger.ApplicationLoader.applicationContext, currentAccount);
+                if (isSelf && user.photo != null) {
+                    boolean hideCurrent = user.photo.personal ? hidePrivate : hidePublic;
+                    if (hideCurrent) {
+                        removePhotoById(arrayList, user.photo.photo_id);
+                    }
+                }
+                if (isSelf && fullUser != null) {
+                    if (hidePrivate && fullUser.personal_photo != null) {
+                        removePhotoById(arrayList, fullUser.personal_photo.id);
+                    }
+                    if (hidePublic && fullUser.profile_photo != null) {
+                        removePhotoById(arrayList, fullUser.profile_photo.id);
+                    }
+                    if ((hidePublic || hidePrivate) && fullUser.fallback_photo != null) {
+                        removePhotoById(arrayList, fullUser.fallback_photo.id);
+                    }
+                }
+                if (arrayList.isEmpty() && dialogPhotos.fromCache && !(isSelf && (hidePrivate || hidePublic))) {
+                    return;
+                }
+                if (fullUser != null && fullUser.personal_photo != null && !hidePrivate) {
                     arrayList.add(0, fullUser.personal_photo);
                     customAvatarIndex = 0;
                 }
-                if (user != null && user.self) {
-                    if (UserObject.hasFallbackPhoto(fullUser)) {
-                        arrayList.add(fullUser.fallback_photo);
-                        fallbackPhotoIndex = arrayList.size() - 1;
-                    }
+                if (isSelf && hidePrivate && fullUser != null && fullUser.profile_photo != null
+                        && !containsPhotoId(arrayList, fullUser.profile_photo.id)) {
+                    arrayList.add(0, fullUser.profile_photo);
+                }
+                if (isSelf && UserObject.hasFallbackPhoto(fullUser) && !hidePublic && !hidePrivate) {
+                    arrayList.add(fullUser.fallback_photo);
+                    fallbackPhotoIndex = arrayList.size() - 1;
                 }
                 thumbsFileNames.clear();
                 videoFileNames.clear();
@@ -1102,6 +1146,13 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 if (currentUploadingImageLocation != null) {
                     addUploadingImage(currentUploadingImageLocation, curreantUploadingThumbLocation);
                 }
+            }
+        } else if (id == NotificationCenter.updateInterfaces) {
+            if (dialogId == UserConfig.getInstance(currentAccount).getClientUserId()
+                    && args != null && args.length > 0 && args[0] instanceof Integer
+                    && ((((Integer) args[0]) & MessagesController.UPDATE_MASK_AVATAR) != 0)
+                    && dialogPhotos != null) {
+                didReceivedNotification(NotificationCenter.dialogPhotosUpdate, currentAccount, dialogPhotos);
             }
         } else if (id == NotificationCenter.fileLoaded) {
             final String fileName = (String) args[0];

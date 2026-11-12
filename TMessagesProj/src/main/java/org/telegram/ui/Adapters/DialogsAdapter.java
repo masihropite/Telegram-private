@@ -149,6 +149,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
     private DialogsActivity parentFragment;
     private boolean isTransitionSupport;
     private boolean hiddenFilterPreloadPending;
+    private final HiddenChatsVault hiddenVault;
 
     private TLRPC.RequestPeerType requestPeerType;
     public boolean isEmpty;
@@ -163,6 +164,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
         hasHints = folder == 0 && type == 0 && !onlySelect && (fragment == null || !fragment.isHiddenChatsMode());
         selectedDialogs = selected;
         currentAccount = account;
+        hiddenVault = new HiddenChatsVault(context, account);
         communityId = fragment != null ? fragment.getCommunityId() : 0;
 
         //  setHasStableIds(true);
@@ -1668,41 +1670,43 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             if (array == null) array = new ArrayList<>();
         }
 
-        // Hidden chats are filtered from every normal folder and shown only
-        // in the dedicated native Telegram-style list.
+        // Filter once per list update. Unknown IDs stay hidden until their
+        // background HMAC check completes, but the UI never performs Keystore work.
         if (array != null) {
-            HiddenChatsVault hiddenVault = new HiddenChatsVault(mContext, currentAccount);
-            ArrayList<Long> filterDialogIds = new ArrayList<>(array.size());
-            for (int i = 0; i < array.size(); i++) {
-                TLRPC.Dialog dialog = array.get(i);
-                if (dialog != null) filterDialogIds.add(dialog.id);
-            }
-            boolean needsFilterPreload = false;
-            for (Long dialogId : filterDialogIds) {
-                if (!hiddenVault.isDialogFilterCached(dialogId)) {
-                    needsFilterPreload = true;
-                    break;
-                }
-            }
-            if (needsFilterPreload && !hiddenFilterPreloadPending) {
-                hiddenFilterPreloadPending = true;
-                hiddenVault.prepareDialogFilterCache(filterDialogIds, () -> {
-                    hiddenFilterPreloadPending = false;
-                    notifyDataSetChanged();
-                });
-            }
             ArrayList<TLRPC.Dialog> visibleDialogs = new ArrayList<>(array.size());
-            for (int i = 0; i < array.size(); i++) {
-                TLRPC.Dialog dialog = array.get(i);
-                if (dialog == null) continue;
-                boolean hidden;
-                if (hiddenChatsMode) {
-                    HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
-                    hidden = activeVault != null && activeVault.isUnlocked() && activeVault.isDialogHidden(dialog.id);
-                } else {
-                    hidden = hiddenVault.isDialogHiddenForFiltering(dialog.id);
+            if (hiddenChatsMode) {
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                boolean unlocked = activeVault != null && activeVault.isUnlocked();
+                for (int i = 0; i < array.size(); i++) {
+                    TLRPC.Dialog dialog = array.get(i);
+                    if (dialog == null) continue;
+                    if (unlocked && activeVault.isDialogHidden(dialog.id)) continue;
+                    visibleDialogs.add(dialog);
                 }
-                if (hiddenChatsMode ? hidden : !hidden) visibleDialogs.add(dialog);
+            } else {
+                ArrayList<Long> pendingDialogIds = new ArrayList<>();
+                for (int i = 0; i < array.size(); i++) {
+                    TLRPC.Dialog dialog = array.get(i);
+                    if (dialog == null) continue;
+                    if (dialog.id == 0) {
+                        visibleDialogs.add(dialog);
+                        continue;
+                    }
+                    if (!hiddenVault.isDialogFilterCached(dialog.id)) {
+                        pendingDialogIds.add(dialog.id);
+                        continue;
+                    }
+                    if (!hiddenVault.isDialogHiddenForFiltering(dialog.id)) {
+                        visibleDialogs.add(dialog);
+                    }
+                }
+                if (!pendingDialogIds.isEmpty() && !hiddenFilterPreloadPending) {
+                    hiddenFilterPreloadPending = true;
+                    hiddenVault.prepareDialogFilterCache(pendingDialogIds, () -> {
+                        hiddenFilterPreloadPending = false;
+                        notifyDataSetChanged();
+                    });
+                }
             }
             array = visibleDialogs;
         }

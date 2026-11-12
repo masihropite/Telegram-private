@@ -438,39 +438,50 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
             TLRPC.User user = (TLRPC.User) object;
             isPremium = user.premium;
             if (user.photo != null) {
-                strippedBitmap = user.photo.strippedBitmap;
-                hasStripped = user.photo.stripped_thumb != null;
-                if (vectorType == VectorAvatarThumbDrawable.TYPE_STATIC) {
-                    final TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
-                    if (userFull != null) {
-                        TLRPC.Photo photo = user.photo.personal ? userFull.personal_photo : userFull.profile_photo;
-                        if (photo != null) {
-                            vectorImageMarkup = FileLoader.getVectorMarkupVideoSize(photo);
-                        }
+                boolean hideOwnPhoto = ImageLocation.isOwnProfilePhotoHidden(currentAccount, user);
+                TLRPC.Photo selectedPhoto = hideOwnPhoto
+                        ? ImageLocation.getOwnAlternateProfilePhoto(currentAccount, user)
+                        : null;
+                if (hideOwnPhoto) {
+                    if (selectedPhoto == null) {
+                        MessagesController.getInstance(currentAccount).loadFullUser(user, currentGuid, false);
                     }
+                    hasStripped = ImageLocation.getForUser(currentAccount, user, ImageLocation.TYPE_STRIPPED) != null;
+                } else {
+                    strippedBitmap = user.photo.strippedBitmap;
+                    hasStripped = user.photo.stripped_thumb != null;
                 }
-                if (vectorImageMarkup == null && animationEnabled && MessagesController.getInstance(currentAccount).isPremiumUser(user) && user.photo.has_video && LiteMode.isEnabled(LiteMode.FLAG_AUTOPLAY_VIDEOS)) {
-                    final TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
+                final TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
+                if (!hideOwnPhoto && userFull != null) {
+                    selectedPhoto = user.photo.personal ? userFull.personal_photo : userFull.profile_photo;
+                }
+                if (vectorType == VectorAvatarThumbDrawable.TYPE_STATIC && selectedPhoto != null) {
+                    vectorImageMarkup = FileLoader.getVectorMarkupVideoSize(selectedPhoto);
+                }
+                boolean hasSelectedVideo = selectedPhoto != null && selectedPhoto.video_sizes != null && !selectedPhoto.video_sizes.isEmpty();
+                boolean shouldLoadAnimation = hideOwnPhoto ? hasSelectedVideo : user.photo.has_video;
+                if (vectorImageMarkup == null && animationEnabled
+                        && MessagesController.getInstance(currentAccount).isPremiumUser(user)
+                        && shouldLoadAnimation && LiteMode.isEnabled(LiteMode.FLAG_AUTOPLAY_VIDEOS)) {
                     if (userFull == null) {
                         MessagesController.getInstance(currentAccount).loadFullUser(user, currentGuid, false);
-                    } else {
-                        TLRPC.Photo photo = user.photo.personal ? userFull.personal_photo : userFull.profile_photo;
-                        if (photo != null) {
-                            vectorImageMarkup = FileLoader.getVectorMarkupVideoSize(photo);
-                            if (vectorImageMarkup == null) {
-                                ArrayList<TLRPC.VideoSize> videoSizes = photo.video_sizes;
-                                if (videoSizes != null && !videoSizes.isEmpty()) {
-                                    TLRPC.VideoSize videoSize = FileLoader.getClosestVideoSizeWithSize(videoSizes, 100);
-                                    for (int i = 0; i < videoSizes.size(); i++) {
-                                        TLRPC.VideoSize videoSize1 = videoSizes.get(i);
-                                        if ("p".equals(videoSize1.type)) {
-                                            videoSize = videoSize1;
-                                        }
-                                        if (videoSize1 instanceof TLRPC.TL_videoSizeEmojiMarkup || videoSize1 instanceof TLRPC.TL_videoSizeStickerMarkup) {
-                                            vectorImageMarkup = videoSize1;
-                                        }
+                    } else if (selectedPhoto != null) {
+                        vectorImageMarkup = FileLoader.getVectorMarkupVideoSize(selectedPhoto);
+                        if (vectorImageMarkup == null) {
+                            ArrayList<TLRPC.VideoSize> videoSizes = selectedPhoto.video_sizes;
+                            if (videoSizes != null && !videoSizes.isEmpty()) {
+                                TLRPC.VideoSize videoSize = FileLoader.getClosestVideoSizeWithSize(videoSizes, 100);
+                                for (int i = 0; i < videoSizes.size(); i++) {
+                                    TLRPC.VideoSize videoSize1 = videoSizes.get(i);
+                                    if ("p".equals(videoSize1.type)) {
+                                        videoSize = videoSize1;
                                     }
-                                    videoLocation = ImageLocation.getForPhoto(videoSize, photo);
+                                    if (videoSize1 instanceof TLRPC.TL_videoSizeEmojiMarkup || videoSize1 instanceof TLRPC.TL_videoSizeStickerMarkup) {
+                                        vectorImageMarkup = videoSize1;
+                                    }
+                                }
+                                if (videoSize != null) {
+                                    videoLocation = ImageLocation.getForPhoto(videoSize, selectedPhoto);
                                 }
                             }
                         }

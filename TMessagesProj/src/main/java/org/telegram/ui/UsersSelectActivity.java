@@ -50,6 +50,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
@@ -116,6 +117,7 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
     private boolean isInclude;
     private int filterFlags;
     private ArrayList<Long> initialIds;
+    private HiddenChatsVault hiddenChatsVault;
 
     private boolean searchWas;
     private boolean searching;
@@ -704,6 +706,9 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
 
         LinearLayoutManager linearLayoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
 
+        if (type == TYPE_FILTER) {
+            hiddenChatsVault = new HiddenChatsVault(context, currentAccount);
+        }
         listView = new RecyclerListView(context);
         listView.setFastScrollEnabled(RecyclerListView.FastScroll.LETTER_TYPE);
         listView.setEmptyView(emptyView);
@@ -884,25 +889,50 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
             }
         }
         if (initialIds != null && !initialIds.isEmpty()) {
-            TLObject object;
-            for (int a = 0, N = initialIds.size(); a < N; a++) {
-                Long id = initialIds.get(a);
-                if (id > 0) {
-                    object = getMessagesController().getUser(id);
+            ArrayList<Long> ids = new ArrayList<>(initialIds);
+            if (type == TYPE_FILTER && hiddenChatsVault != null) {
+                boolean needsPreload = false;
+                for (Long id : ids) {
+                    if (id != null && id.longValue() != 0 && !hiddenChatsVault.isDialogFilterCached(id.longValue())) {
+                        needsPreload = true;
+                        break;
+                    }
+                }
+                if (needsPreload) {
+                    hiddenChatsVault.prepareDialogFilterCache(ids, () -> addInitialDialogSpans(ids));
                 } else {
-                    object = getMessagesController().getChat(-id);
+                    addInitialDialogSpans(ids);
                 }
-                if (object == null) {
-                    continue;
-                }
-                GroupCreateSpan span = new GroupCreateSpan(editText.getContext(), object);
-                spansContainer.addSpan(span, false);
-                span.setOnClickListener(UsersSelectActivity.this);
+            } else {
+                addInitialDialogSpans(ids);
             }
         }
 
         updateHint();
         return fragmentView;
+    }
+
+    private void addInitialDialogSpans(ArrayList<Long> ids) {
+        if (spansContainer == null || editText == null || ids == null) {
+            return;
+        }
+        for (Long value : ids) {
+            if (value == null || value.longValue() == 0) continue;
+            long id = value.longValue();
+            if (type == TYPE_FILTER && hiddenChatsVault != null
+                    && (!hiddenChatsVault.isDialogFilterCached(id) || hiddenChatsVault.isDialogHiddenForFiltering(id))) {
+                continue;
+            }
+            if (selectedContacts.indexOfKey(id) >= 0) continue;
+            TLObject object = id > 0
+                    ? getMessagesController().getUser(id)
+                    : getMessagesController().getChat(-id);
+            if (object == null) continue;
+            GroupCreateSpan span = new GroupCreateSpan(editText.getContext(), object);
+            spansContainer.addSpan(span, false);
+            span.setOnClickListener(UsersSelectActivity.this);
+        }
+        updateHint();
     }
 
     @Override
@@ -1085,9 +1115,15 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
         private boolean searching;
         private ArrayList<TLObject> contacts = new ArrayList<>();
         private final int usersStartRow;
+        private final boolean filterHiddenChats;
+        private final HashSet<Long> pendingHiddenFilterIds = new HashSet<>();
+        private boolean hiddenContactsReady;
 
         public GroupCreateAdapter(Context ctx) {
             context = ctx;
+            filterHiddenChats = type == TYPE_FILTER;
+            hiddenContactsReady = !filterHiddenChats;
+            if (filterHiddenChats && hiddenChatsVault == null) hiddenChatsVault = new HiddenChatsVault(ctx, currentAccount);
 
             if (noChatTypes) {
                 usersStartRow = 0;
@@ -1148,6 +1184,81 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
                 }
                 notifyDataSetChanged();
             });
+            prepareHiddenContacts();
+        }
+
+        private long getDialogId(Object object) {
+            if (object instanceof TLRPC.User) return ((TLRPC.User) object).id;
+            if (object instanceof TLRPC.Chat) return -((TLRPC.Chat) object).id;
+            return 0;
+        }
+
+        private boolean isVisibleInFolderPicker(Object object) {
+            if (!filterHiddenChats) return true;
+            if (hiddenChatsVault == null) return false;
+            long dialogId = getDialogId(object);
+            if (dialogId == 0) return true;
+            if (!hiddenChatsVault.isDialogFilterCached(dialogId)) {
+                if (pendingHiddenFilterIds.add(dialogId)) {
+                    ArrayList<Long> ids = new ArrayList<>(1);
+                    ids.add(dialogId);
+                    hiddenChatsVault.prepareDialogFilterCache(ids, () -> {
+                        pendingHiddenFilterIds.remove(dialogId);
+                        notifyDataSetChanged();
+                    });
+                }
+                return false;
+            }
+            return !hiddenChatsVault.isDialogHiddenForFiltering(dialogId);
+        }
+
+        private void prepareHiddenContacts() {
+            if (!filterHiddenChats || hiddenChatsVault == null) return;
+            ArrayList<Long> ids = new ArrayList<>(contacts.size());
+            boolean needsPreload = false;
+            for (Object object : contacts) {
+                long dialogId = getDialogId(object);
+                if (dialogId == 0) continue;
+                ids.add(dialogId);
+                if (!hiddenChatsVault.isDialogFilterCached(dialogId)) needsPreload = true;
+            }
+            if (!needsPreload) {
+                removeHiddenContacts();
+                hiddenContactsReady = true;
+                return;
+            }
+            hiddenChatsVault.prepareDialogFilterCache(ids, () -> {
+                removeHiddenContacts();
+                hiddenContactsReady = true;
+                notifyDataSetChanged();
+            });
+        }
+
+        private void removeHiddenContacts() {
+            for (int i = contacts.size() - 1; i >= 0; i--) {
+                if (!isVisibleInFolderPicker(contacts.get(i))) contacts.remove(i);
+            }
+        }
+
+        private int getVisibleCount(ArrayList<?> items) {
+            if (items == null) return 0;
+            if (!filterHiddenChats) return items.size();
+            int count = 0;
+            for (Object item : items) if (isVisibleInFolderPicker(item)) count++;
+            return count;
+        }
+
+        private int getVisibleIndex(ArrayList<?> items, int visiblePosition) {
+            if (items == null || visiblePosition < 0) return -1;
+            if (!filterHiddenChats) return visiblePosition < items.size() ? visiblePosition : -1;
+            int current = 0;
+            for (int i = 0; i < items.size(); i++) {
+                if (isVisibleInFolderPicker(items.get(i))) {
+                    if (current == visiblePosition) return i;
+                    current++;
+                }
+            }
+            return -1;
         }
 
         public void setSearching(boolean value) {
@@ -1167,10 +1278,9 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
         public int getItemCount() {
             int count;
             if (searching) {
-                count = searchResult.size();
-                int localServerCount = searchAdapterHelper.getLocalServerSearch().size();
-                int globalCount = searchAdapterHelper.getGlobalSearch().size();
-                count += localServerCount + globalCount;
+                count = getVisibleCount(searchResult);
+                count += getVisibleCount(searchAdapterHelper.getLocalServerSearch());
+                count += getVisibleCount(searchAdapterHelper.getGlobalSearch());
                 return count;
             } else {
                 if (noChatTypes) {
@@ -1186,6 +1296,7 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
                 } else {
                     count = 0;
                 }
+                if (filterHiddenChats && !hiddenContactsReady) return count;
                 count += contacts.size();
             }
             return count;
@@ -1215,18 +1326,25 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
                     CharSequence username = null;
                     CharSequence name = null;
                     if (searching) {
-                        int localCount = searchResult.size();
-                        int globalCount = searchAdapterHelper.getGlobalSearch().size();
-                        int localServerCount = searchAdapterHelper.getLocalServerSearch().size();
-
+                        int localCount = getVisibleCount(searchResult);
+                        ArrayList<TLObject> localServerResults = searchAdapterHelper.getLocalServerSearch();
+                        ArrayList<TLObject> globalResults = searchAdapterHelper.getGlobalSearch();
+                        int localServerCount = getVisibleCount(localServerResults);
+                        int globalCount = getVisibleCount(globalResults);
+                        int sourceIndex = -1;
+                        boolean localResult = false;
                         if (position >= 0 && position < localCount) {
-                            object = searchResult.get(position);
-                        } else if (position >= localCount && position < localServerCount + localCount) {
-                            object = searchAdapterHelper.getLocalServerSearch().get(position - localCount);
-                        } else if (position > localCount + localServerCount && position < globalCount + localCount + localServerCount) {
-                            object = searchAdapterHelper.getGlobalSearch().get(position - localCount - localServerCount);
-                        } else {
-                            object = null;
+                            sourceIndex = getVisibleIndex(searchResult, position);
+                            if (sourceIndex >= 0) {
+                                object = searchResult.get(sourceIndex);
+                                localResult = true;
+                            }
+                        } else if (position >= localCount && position < localCount + localServerCount) {
+                            sourceIndex = getVisibleIndex(localServerResults, position - localCount);
+                            if (sourceIndex >= 0) object = localServerResults.get(sourceIndex);
+                        } else if (position >= localCount + localServerCount && position < localCount + localServerCount + globalCount) {
+                            sourceIndex = getVisibleIndex(globalResults, position - localCount - localServerCount);
+                            if (sourceIndex >= 0) object = globalResults.get(sourceIndex);
                         }
                         if (object != null) {
                             String objectUserName;
@@ -1235,19 +1353,16 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
                             } else {
                                 objectUserName = ChatObject.getPublicUsername((TLRPC.Chat) object);
                             }
-                            if (position < localCount) {
-                                name = searchResultNames.get(position);
-                                if (name != null && !TextUtils.isEmpty(objectUserName)) {
-                                    if (name.toString().startsWith("@" + objectUserName)) {
-                                        username = name;
-                                        name = null;
-                                    }
+                            if (localResult) {
+                                if (sourceIndex < searchResultNames.size()) name = searchResultNames.get(sourceIndex);
+                                if (name != null && !TextUtils.isEmpty(objectUserName)
+                                        && name.toString().startsWith("@" + objectUserName)) {
+                                    username = name;
+                                    name = null;
                                 }
-                            } else if (position > localCount && !TextUtils.isEmpty(objectUserName)) {
+                            } else if (position >= localCount && !TextUtils.isEmpty(objectUserName)) {
                                 String foundUserName = searchAdapterHelper.getLastFoundUsername();
-                                if (foundUserName.startsWith("@")) {
-                                    foundUserName = foundUserName.substring(1);
-                                }
+                                if (foundUserName.startsWith("@")) foundUserName = foundUserName.substring(1);
                                 try {
                                     int index;
                                     SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
@@ -1255,11 +1370,8 @@ public class UsersSelectActivity extends BaseFragment implements NotificationCen
                                     spannableStringBuilder.append(objectUserName);
                                     if ((index = AndroidUtilities.indexOfIgnoreCase(objectUserName, foundUserName)) != -1) {
                                         int len = foundUserName.length();
-                                        if (index == 0) {
-                                            len++;
-                                        } else {
-                                            index++;
-                                        }
+                                        if (index == 0) len++;
+                                        else index++;
                                         spannableStringBuilder.setSpan(new ForegroundColorSpanThemable(Theme.key_windowBackgroundWhiteBlueText4), index, index + len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                                     }
                                     username = spannableStringBuilder;

@@ -164,16 +164,62 @@ public class ImageLocation {
         return getForUser(UserConfig.selectedAccount, user, type);
     }
 
-    private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type, boolean hiddenPhotoIsPrivate) {
-        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL || type == TYPE_STRIPPED) {
+    public static boolean isOwnProfilePhotoHidden(int currentAccount, TLRPC.User user) {
+        if (user == null || user.photo == null || user.id != UserConfig.getInstance(currentAccount).getClientUserId()) {
+            return false;
+        }
+        return user.photo.personal
+                ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+    }
+
+    public static TLRPC.Photo getOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user) {
+        if (!isOwnProfilePhotoHidden(currentAccount, user)) {
             return null;
         }
         TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
         if (userFull == null) {
             return null;
         }
-        TLRPC.Photo alternatePhoto = hiddenPhotoIsPrivate ? userFull.fallback_photo : userFull.personal_photo;
-        if (alternatePhoto == null || alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
+        return user.photo.personal
+                ? (userFull.profile_photo != null ? userFull.profile_photo : userFull.fallback_photo)
+                : userFull.personal_photo;
+    }
+
+    private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type) {
+        TLRPC.Photo alternatePhoto = getOwnAlternateProfilePhoto(currentAccount, user);
+        if (alternatePhoto == null) {
+            return null;
+        }
+        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
+            if (alternatePhoto.video_sizes == null || alternatePhoto.video_sizes.isEmpty()) {
+                return null;
+            }
+            int targetSize = type == TYPE_VIDEO_BIG ? 1000 : 100;
+            TLRPC.VideoSize videoSize = FileLoader.getClosestVideoSizeWithSize(alternatePhoto.video_sizes, targetSize);
+            if (type == TYPE_VIDEO_SMALL) {
+                for (int i = 0; i < alternatePhoto.video_sizes.size(); i++) {
+                    if ("p".equals(alternatePhoto.video_sizes.get(i).type)) {
+                        videoSize = alternatePhoto.video_sizes.get(i);
+                        break;
+                    }
+                }
+            }
+            return videoSize == null ? null : ImageLocation.getForPhoto(videoSize, alternatePhoto);
+        }
+        if (type == TYPE_STRIPPED) {
+            if (alternatePhoto.sizes == null) {
+                return null;
+            }
+            for (int i = 0; i < alternatePhoto.sizes.size(); i++) {
+                TLRPC.PhotoSize size = alternatePhoto.sizes.get(i);
+                if (size instanceof TLRPC.TL_photoStrippedSize) {
+                    return ImageLocation.getForPhoto(size, alternatePhoto);
+                }
+            }
+            return null;
+        }
+        if (alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
             return null;
         }
         int targetSize = type == TYPE_BIG ? 1000 : 100;
@@ -185,16 +231,10 @@ public class ImageLocation {
         if (user == null) {
             return null;
         }
-        if (user.id == UserConfig.getInstance(currentAccount).getClientUserId() && user.photo != null) {
-            boolean hidePhoto = user.photo.personal
-                    ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
-                    : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
-            if (hidePhoto) {
-                ImageLocation alternate = getForOwnAlternateProfilePhoto(currentAccount, user, type, user.photo.personal);
-                if (alternate != null) {
-                    return alternate;
-                }
-            }
+        if (isOwnProfilePhotoHidden(currentAccount, user)) {
+            // Never fall back to the hidden photo when the alternate is not
+            // loaded yet. A placeholder is safer than exposing a hidden image.
+            return getForOwnAlternateProfilePhoto(currentAccount, user, type);
         }
         if (user.photo == null) {
             return null;

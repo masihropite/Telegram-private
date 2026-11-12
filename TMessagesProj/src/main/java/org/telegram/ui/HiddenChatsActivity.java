@@ -37,6 +37,8 @@ public class HiddenChatsActivity extends BaseFragment {
     private HiddenChatsVault vault;
     private LinearLayout content;
     private LinearLayout rows;
+    private Button privatePhotoButton;
+    private Button publicPhotoButton;
     private boolean handedOffToHiddenList;
 
     public HiddenChatsActivity(int account) {
@@ -97,15 +99,15 @@ public class HiddenChatsActivity extends BaseFragment {
         add.setOnClickListener(v -> openChatPicker());
         content.addView(add, new LinearLayout.LayoutParams(-1, -2));
 
-        Button privatePhoto = new Button(context);
-        updateProfilePhotoButton(privatePhoto, true);
-        privatePhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(true, privatePhoto));
-        content.addView(privatePhoto, new LinearLayout.LayoutParams(-1, -2));
+        privatePhotoButton = new Button(context);
+        updateProfilePhotoButton(privatePhotoButton, true);
+        privatePhotoButton.setOnClickListener(v -> toggleProfilePhotoVisibility(true));
+        content.addView(privatePhotoButton, new LinearLayout.LayoutParams(-1, -2));
 
-        Button publicPhoto = new Button(context);
-        updateProfilePhotoButton(publicPhoto, false);
-        publicPhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(false, publicPhoto));
-        content.addView(publicPhoto, new LinearLayout.LayoutParams(-1, -2));
+        publicPhotoButton = new Button(context);
+        updateProfilePhotoButton(publicPhotoButton, false);
+        publicPhotoButton.setOnClickListener(v -> toggleProfilePhotoVisibility(false));
+        content.addView(publicPhotoButton, new LinearLayout.LayoutParams(-1, -2));
 
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
@@ -127,19 +129,18 @@ public class HiddenChatsActivity extends BaseFragment {
         button.setText((hidden ? "نمایش عکس " : "مخفی‌کردن عکس ") + kind);
     }
 
-    private void toggleProfilePhotoVisibility(boolean privatePhoto, Button button) {
+    private void toggleProfilePhotoVisibility(boolean privatePhoto) {
         boolean current = privatePhoto
                 ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
                 : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
         boolean saved = org.telegram.messenger.LocalProfilePhotoSettings.setHidden(
                 ApplicationLoader.applicationContext, currentAccount, privatePhoto, !current);
         if (!saved) {
-            Toast.makeText(getParentActivity(),
-                    "برای اینکه حداقل یک عکس قابل مشاهده بماند، ابتدا عکس دیگر را نمایش دهید.",
-                    Toast.LENGTH_LONG).show();
+            Toast.makeText(getParentActivity(), "ذخیره تنظیمات نمایش عکس انجام نشد.", Toast.LENGTH_LONG).show();
             return;
         }
-        updateProfilePhotoButton(button, privatePhoto);
+        updateProfilePhotoButton(privatePhotoButton, true);
+        updateProfilePhotoButton(publicPhotoButton, false);
         org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
                 org.telegram.messenger.NotificationCenter.updateInterfaces,
                 org.telegram.messenger.MessagesController.UPDATE_MASK_AVATAR);

@@ -66,6 +66,7 @@ public final class HiddenChatsVault {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
+    private static final ThreadLocal<Mac> FILTER_MAC = new ThreadLocal<>();
     private static volatile HiddenChatsVault activeVault;
     private static final Object FILTER_CACHE_LOCK = new Object();
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
@@ -282,11 +283,16 @@ public final class HiddenChatsVault {
                     }
                 } else {
                     for (Long id : pendingIds) {
+                        if (expectedGeneration.get() != generation) break;
                         boolean hidden = tokens == null;
                         if (tokens != null) {
                             try {
-                                String token = dialogToken(id.longValue());
-                                FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
+                                String cacheKey = filterCacheKey(id.longValue());
+                                String token = FILTER_TOKEN_CACHE.get(cacheKey);
+                                if (token == null) {
+                                    token = dialogToken(id.longValue());
+                                    FILTER_TOKEN_CACHE.put(cacheKey, token);
+                                }
                                 hidden = tokens.contains(token);
                             } catch (Exception e) {
                                 hidden = true;
@@ -329,16 +335,44 @@ public final class HiddenChatsVault {
         return account + ":" + dialogId;
     }
 
-    private void invalidateFilterCache() {
+    private void refreshFilterCache() {
+        ArrayList<Runnable> callbacks = new ArrayList<>();
         synchronized (FILTER_CACHE_LOCK) {
             AtomicInteger generation = FILTER_CACHE_GENERATIONS.get(account);
-            if (generation != null) generation.incrementAndGet();
+            if (generation == null) {
+                AtomicInteger created = new AtomicInteger();
+                AtomicInteger existing = FILTER_CACHE_GENERATIONS.putIfAbsent(account, created);
+                generation = existing == null ? created : existing;
+            }
+            generation.incrementAndGet();
             String prefix = account + ":";
-            for (String key : FILTER_CACHE.keySet()) {
+            for (String key : new ArrayList<>(FILTER_CACHE.keySet())) {
                 if (key.startsWith(prefix)) {
-                    FILTER_CACHE.remove(key);
+                    try {
+                        long id = Long.parseLong(key.substring(prefix.length()));
+                        FILTER_CACHE.put(key, hiddenDialogIds.contains(id));
+                    } catch (NumberFormatException ignore) {
+                    }
                 }
             }
+            for (String key : new ArrayList<>(FILTER_CACHE_PENDING)) {
+                if (key.startsWith(prefix)) {
+                    try {
+                        long id = Long.parseLong(key.substring(prefix.length()));
+                        FILTER_CACHE.put(key, hiddenDialogIds.contains(id));
+                    } catch (NumberFormatException ignore) {
+                    }
+                    FILTER_CACHE_PENDING.remove(key);
+                    CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
+                    if (waiters != null) callbacks.addAll(waiters);
+                }
+            }
+            for (Long id : hiddenDialogIds) {
+                FILTER_CACHE.put(filterCacheKey(id.longValue()), true);
+            }
+        }
+        for (Runnable callback : callbacks) {
+            callback.run();
         }
     }
 
@@ -419,7 +453,7 @@ public final class HiddenChatsVault {
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
         }
-        invalidateFilterCache();
+        refreshFilterCache();
     }
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
@@ -445,13 +479,19 @@ public final class HiddenChatsVault {
                     }
                 }
             }
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(key);
+            Mac mac = FILTER_MAC.get();
+            if (mac == null) {
+                mac = Mac.getInstance("HmacSHA256");
+                mac.init(key);
+                FILTER_MAC.set(mac);
+            }
             byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
             return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
         } catch (GeneralSecurityException e) {
+            FILTER_MAC.remove();
             throw e;
         } catch (Exception e) {
+            FILTER_MAC.remove();
             throw new GeneralSecurityException("Could not access Android Keystore", e);
         }
     }
