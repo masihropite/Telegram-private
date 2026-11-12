@@ -65,9 +65,8 @@ public final class HiddenChatsVault {
     private static final int MAX_DIALOGS = 100000;
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static volatile SecretKey cachedFilterKey;
-    private static final ThreadLocal<Mac> FILTER_MAC = new ThreadLocal<>();
-    private static volatile HiddenChatsVault activeVault;
+    private static final ConcurrentHashMap<Integer, SecretKey> CACHED_FILTER_KEYS = new ConcurrentHashMap<Integer, SecretKey>();
+    private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
     private static final Object FILTER_CACHE_LOCK = new Object();
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
     private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
@@ -96,15 +95,15 @@ public final class HiddenChatsVault {
     }
 
     public void registerAsActiveVault() {
-        activeVault = this;
+        ACTIVE_VAULTS.put(account, this);
     }
 
-    public static HiddenChatsVault getActiveVault() {
-        return activeVault;
+    public static HiddenChatsVault getActiveVault(int account) {
+        return ACTIVE_VAULTS.get(account);
     }
 
-    public static void lockActiveVault() {
-        HiddenChatsVault current = activeVault;
+    public static void lockActiveVault(int account) {
+        HiddenChatsVault current = ACTIVE_VAULTS.get(account);
         if (current != null) {
             current.lock();
         }
@@ -464,40 +463,35 @@ public final class HiddenChatsVault {
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
         try {
-            SecretKey key = cachedFilterKey;
+            SecretKey key = CACHED_FILTER_KEYS.get(account);
             if (key == null) {
-                synchronized (HiddenChatsVault.class) {
-                    key = cachedFilterKey;
+                synchronized (CACHED_FILTER_KEYS) {
+                    key = CACHED_FILTER_KEYS.get(account);
                     if (key == null) {
+                        String accountAlias = KEYSTORE_ALIAS + "_" + account;
                         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
                         keyStore.load(null);
-                        if (keyStore.containsAlias(KEYSTORE_ALIAS)) {
-                            key = (SecretKey) keyStore.getKey(KEYSTORE_ALIAS, null);
+                        if (keyStore.containsAlias(accountAlias)) {
+                            key = (SecretKey) keyStore.getKey(accountAlias, null);
                         } else {
                             KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore");
-                            generator.init(new KeyGenParameterSpec.Builder(KEYSTORE_ALIAS,
+                            generator.init(new KeyGenParameterSpec.Builder(accountAlias,
                                     KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
                                     .setDigests(KeyProperties.DIGEST_SHA256)
                                     .build());
                             key = generator.generateKey();
                         }
-                        cachedFilterKey = key;
+                        CACHED_FILTER_KEYS.put(account, key);
                     }
                 }
             }
-            Mac mac = FILTER_MAC.get();
-            if (mac == null) {
-                mac = Mac.getInstance("HmacSHA256");
-                mac.init(key);
-                FILTER_MAC.set(mac);
-            }
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(key);
             byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
             return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
         } catch (GeneralSecurityException e) {
-            FILTER_MAC.remove();
             throw e;
         } catch (Exception e) {
-            FILTER_MAC.remove();
             throw new GeneralSecurityException("Could not access Android Keystore", e);
         }
     }
