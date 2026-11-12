@@ -2787,7 +2787,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             onlySelect = arguments.getBoolean("onlySelect", false);
             hiddenChatsMode = arguments.getBoolean("hiddenChatsMode", false);
             if (hiddenChatsMode) {
-                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+                HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
                 if (activeVault == null || !activeVault.isUnlocked()) return false;
             }
             canSelectTopics = arguments.getBoolean("canSelectTopics", false);
@@ -2944,7 +2944,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void openHiddenChatPicker() {
-        HiddenChatsVault vault = HiddenChatsVault.getActiveVault();
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
         if (vault == null || !vault.isUnlocked()) {
             Toast.makeText(getParentActivity(), "ابتدا گفتگوهای مخفی را باز کنید", Toast.LENGTH_SHORT).show();
             return;
@@ -3058,7 +3058,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         if (hiddenChatsMode) {
-            HiddenChatsVault.lockActiveVault();
+            HiddenChatsVault.lockActiveVault(currentAccount);
             if (getParentActivity() != null) {
                 getParentActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
             }
@@ -7043,7 +7043,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public void onResume() {
         super.onResume();
         if (hiddenChatsMode) {
-            HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault();
+            HiddenChatsVault activeVault = HiddenChatsVault.getActiveVault(currentAccount);
             if (activeVault == null || !activeVault.isUnlocked()) {
                 finishFragment();
                 return;
