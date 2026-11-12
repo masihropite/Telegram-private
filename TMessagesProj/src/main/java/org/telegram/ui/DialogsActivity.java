@@ -1714,6 +1714,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         private int lastTop;
         private int lastListPadding;
         private float rightFragmentOpenedProgress;
+        private ValueAnimator viewOffsetAnimator;
 
         Paint paint = new Paint();
         RectF rectF = new RectF();
@@ -2180,6 +2181,20 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         }
 
+        public void resetScrollInteractionState() {
+            if (viewOffsetAnimator != null) {
+                viewOffsetAnimator.cancel();
+                viewOffsetAnimator = null;
+            }
+            setScrollEnabled(true);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            resetScrollInteractionState();
+            super.onDetachedFromWindow();
+        }
+
         @Override
         public boolean onTouchEvent(MotionEvent e) {
             if (fastScrollAnimationRunning || waitingForScrollFinished || rightFragmentTransitionInProgress) {
@@ -2285,20 +2300,36 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         }
 
                         if (getViewOffset() != 0) {
-                            ValueAnimator valueAnimator = ValueAnimator.ofFloat(getViewOffset(), 0f);
-                            valueAnimator.addUpdateListener(animation -> setViewsOffset((float) animation.getAnimatedValue()));
-
-                            valueAnimator.setDuration(Math.max(100, (long) (350f - 120f * (getViewOffset() / PullForegroundDrawable.getMaxOverscroll()))));
-                            valueAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+                            if (viewOffsetAnimator != null) {
+                                viewOffsetAnimator.cancel();
+                                viewOffsetAnimator = null;
+                            }
+                            viewOffsetAnimator = ValueAnimator.ofFloat(getViewOffset(), 0f);
+                            viewOffsetAnimator.addUpdateListener(animation -> setViewsOffset((float) animation.getAnimatedValue()));
+                            viewOffsetAnimator.setDuration(Math.max(100, (long) (350f - 120f * (getViewOffset() / PullForegroundDrawable.getMaxOverscroll()))));
+                            viewOffsetAnimator.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
                             setScrollEnabled(false);
-                            valueAnimator.addListener(new AnimatorListenerAdapter() {
-                                @Override
-                                public void onAnimationEnd(Animator animation) {
-                                    super.onAnimationEnd(animation);
+                            viewOffsetAnimator.addListener(new AnimatorListenerAdapter() {
+                                private void restoreScroll() {
+                                    if (viewOffsetAnimator == animationRef) {
+                                        viewOffsetAnimator = null;
+                                    }
                                     setScrollEnabled(true);
                                 }
+
+                                private final ValueAnimator animationRef = viewOffsetAnimator;
+
+                                @Override
+                                public void onAnimationEnd(Animator animation) {
+                                    restoreScroll();
+                                }
+
+                                @Override
+                                public void onAnimationCancel(Animator animation) {
+                                    restoreScroll();
+                                }
                             });
-                            valueAnimator.start();
+                            viewOffsetAnimator.start();
                         }
                     }
                 }
@@ -7034,6 +7065,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         if (viewPages != null) {
             for (int a = 0; a < viewPages.length; a++) {
+                // A navigation transition can interrupt the archive offset animation.
+                // Always restore list scrolling when this dialogs screen becomes active again.
+                viewPages[a].listView.resetScrollInteractionState();
                 viewPages[a].dialogsAdapter.notifyDataSetChanged();
             }
         }
