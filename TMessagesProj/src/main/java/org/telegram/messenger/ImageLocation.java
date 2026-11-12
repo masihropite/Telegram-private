@@ -181,9 +181,25 @@ public class ImageLocation {
         if (userFull == null) {
             return null;
         }
-        return user.photo.personal
-                ? (userFull.profile_photo != null ? userFull.profile_photo : userFull.fallback_photo)
-                : userFull.personal_photo;
+
+        // Never replace a hidden photo with another photo that is also hidden.
+        if (user.photo.personal) {
+            if (LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)) {
+                return null;
+            }
+            TLRPC.Photo publicPhoto = userFull.profile_photo;
+            if (publicPhoto != null && publicPhoto.id != user.photo.photo_id) {
+                return publicPhoto;
+            }
+            TLRPC.Photo fallbackPhoto = userFull.fallback_photo;
+            return fallbackPhoto != null && fallbackPhoto.id != user.photo.photo_id ? fallbackPhoto : null;
+        } else {
+            if (LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)) {
+                return null;
+            }
+            TLRPC.Photo privatePhoto = userFull.personal_photo;
+            return privatePhoto != null && privatePhoto.id != user.photo.photo_id ? privatePhoto : null;
+        }
     }
 
     private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type) {
