@@ -28,22 +28,11 @@ public final class LocalProfilePhotoSettings {
     }
 
     /**
-     * Changes one local visibility switch. Hiding one photo automatically
-     * reveals the other, so at least one photo always remains visible. Do not
-     * rely on UserFull photo metadata here because it may not have been loaded yet.
+     * Changes only the requested photo's local visibility switch.
+     * Public and private photo visibility are independent.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
-        SharedPreferences preferences = getPreferences(context, account);
-        boolean otherHidden = preferences.getBoolean(privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE, false);
-        if (hidden && otherHidden) {
-            return false;
-        }
         String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
-        String otherKey = privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE;
-        SharedPreferences.Editor editor = preferences.edit().putBoolean(key, hidden);
-        if (hidden) {
-            editor.putBoolean(otherKey, false);
-        }
-        return editor.commit();
+        return getPreferences(context, account).edit().putBoolean(key, hidden).commit();
     }
 }
