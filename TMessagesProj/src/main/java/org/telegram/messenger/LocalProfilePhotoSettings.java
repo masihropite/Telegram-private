@@ -32,7 +32,14 @@ public final class LocalProfilePhotoSettings {
      * Public and private photo visibility are independent.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
+        SharedPreferences preferences = getPreferences(context, account);
         String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
-        return getPreferences(context, account).edit().putBoolean(key, hidden).commit();
+        String otherKey = privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE;
+
+        // Never allow both profile-photo types to be hidden at the same time.
+        if (hidden && preferences.getBoolean(otherKey, false)) {
+            return false;
+        }
+        return preferences.edit().putBoolean(key, hidden).commit();
     }
 }

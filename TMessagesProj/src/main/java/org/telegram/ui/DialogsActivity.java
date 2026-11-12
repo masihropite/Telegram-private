@@ -115,6 +115,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FilesMigrationService;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
+import org.telegram.messenger.LocalProfilePhotoSettings;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
@@ -2972,6 +2973,47 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         presentFragment(picker);
     }
 
+    private void showTelegramZSecretMenu() {
+        if (getParentActivity() == null) {
+            return;
+        }
+
+        boolean ghostModeEnabled = getMessagesController().isGhostModeEnabled();
+        boolean publicPhotoHidden = LocalProfilePhotoSettings.isPublicHidden(getParentActivity(), currentAccount);
+        boolean privatePhotoHidden = LocalProfilePhotoSettings.isPrivateHidden(getParentActivity(), currentAccount);
+        String[] items = new String[] {
+                "گفتگوهای مخفی",
+                "حالت روح (Ghost Mode): " + (ghostModeEnabled ? "روشن" : "خاموش"),
+                "مخفی‌سازی عکس عمومی: " + (publicPhotoHidden ? "روشن" : "خاموش"),
+                "مخفی‌سازی عکس خصوصی: " + (privatePhotoHidden ? "روشن" : "خاموش")
+        };
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle("TelegramZ");
+        builder.setItems(items, (dialog, which) -> {
+            if (which == 0) {
+                presentFragment(new HiddenChatsActivity(currentAccount));
+            } else if (which == 1) {
+                boolean enabled = !getMessagesController().isGhostModeEnabled();
+                getMessagesController().setGhostModeEnabled(enabled);
+                Toast.makeText(getParentActivity(), enabled ? "حالت روح فعال شد" : "حالت روح غیرفعال شد", Toast.LENGTH_SHORT).show();
+            } else if (which == 2 || which == 3) {
+                boolean privatePhoto = which == 3;
+                boolean currentlyHidden = privatePhoto ? privatePhotoHidden : publicPhotoHidden;
+                boolean hide = !currentlyHidden;
+                if (!LocalProfilePhotoSettings.setHidden(getParentActivity(), currentAccount, privatePhoto, hide)) {
+                    Toast.makeText(getParentActivity(), "حداقل یکی از عکس‌های پروفایل باید قابل مشاهده بماند.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_AVATAR);
+                getNotificationCenter().postNotificationName(NotificationCenter.mainUserInfoChanged);
+                String label = privatePhoto ? "عکس خصوصی" : "عکس عمومی";
+                Toast.makeText(getParentActivity(), label + (hide ? " فقط در این دستگاه مخفی شد" : " دوباره نمایش داده می‌شود"), Toast.LENGTH_SHORT).show();
+            }
+        });
+        showDialog(builder.create());
+    }
+
     public static void loadDialogs(AccountInstance accountInstance) {
         int currentAccount = accountInstance.getCurrentAccount();
         if (!dialogsLoaded[currentAccount]) {
@@ -3547,7 +3589,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 hiddenTitleTapCount++;
                 if (hiddenTitleTapCount >= 5) {
                     hiddenTitleTapCount = 0;
-                    presentFragment(new HiddenChatsActivity(currentAccount));
+                    showTelegramZSecretMenu();
                     return;
                 }
             }
