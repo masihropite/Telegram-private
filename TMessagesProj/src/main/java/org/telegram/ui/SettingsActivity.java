@@ -525,6 +525,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         if (avatarView == null) return;
         if (avatarUploadingRequest != -1) return;
 
+        avatarView.getImageReceiver().setCurrentAccount(currentAccount);
         avatarDrawable.setInfo(user);
         avatarView.setForUserOrChat(user, avatarDrawable);
         titleView.setText(UserObject.getUserName(user));
