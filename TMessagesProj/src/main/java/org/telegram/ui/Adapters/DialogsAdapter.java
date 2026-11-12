@@ -1680,7 +1680,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 for (int i = 0; i < array.size(); i++) {
                     TLRPC.Dialog dialog = array.get(i);
                     if (dialog == null) continue;
-                    if (unlocked && activeVault.isDialogHidden(dialog.id)) continue;
+                    // In hidden-chats mode, show only dialogs explicitly stored in the unlocked vault.
+                    // If the vault is unavailable or locked, fail closed and do not expose the normal dialog list.
+                    if (!unlocked || !activeVault.isDialogHidden(dialog.id)) continue;
                     visibleDialogs.add(dialog);
                 }
             } else {
