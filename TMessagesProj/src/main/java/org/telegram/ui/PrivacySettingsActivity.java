@@ -101,6 +101,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
     private int phoneNumberRow;
     @Keep
     private int lastSeenRow;
+    private int ghostModeRow;
     @Keep
     private int profilePhotoRow;
     @Keep
@@ -331,6 +332,9 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                 if (getUserConfig().getGlobalTTl() >= 0) {
                     presentFragment(new AutoDeleteMessagesActivity());
                 }
+            } else if (position == ghostModeRow) {
+                getMessagesController().setGhostModeEnabled(!getMessagesController().isGhostModeEnabled());
+                listAdapter.notifyItemChanged(ghostModeRow);
             } else if (position == blockedRow) {
                 presentFragment(new PrivacyUsersActivity());
             } else if (position == sessionsRow) {
@@ -751,6 +755,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
         privacySectionRow = rowCount++;
         phoneNumberRow = rowCount++;
         lastSeenRow = rowCount++;
+        ghostModeRow = rowCount++;
         profilePhotoRow = rowCount++;
         forwardsRow = rowCount++;
         callsRow = rowCount++;
@@ -1298,6 +1303,8 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                         textCheckCell.setTextAndCheck(getString("SyncContacts", R.string.SyncContacts), newSync, true);
                     } else if (position == contactsSuggestRow) {
                         textCheckCell.setTextAndCheck(getString("SuggestContacts", R.string.SuggestContacts), newSuggest, false);
+                    } else if (position == ghostModeRow) {
+                        textCheckCell.setTextAndCheck("حالت روح (Ghost Mode)", getMessagesController().isGhostModeEnabled(), false);
                     } else if (position == newChatsRow) {
                         textCheckCell.setTextAndCheck(getString("ArchiveAndMute", R.string.ArchiveAndMute), archiveChats, false);
                     }
@@ -1413,7 +1420,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                 return 1;
             } else if (position == securitySectionRow || position == advancedSectionRow || position == privacySectionRow || position == secretSectionRow || position == botsSectionRow || position == contactsSectionRow || position == newChatsHeaderRow) {
                 return 2;
-            } else if (position == secretWebpageRow || position == contactsSyncRow || position == contactsSuggestRow || position == newChatsRow) {
+            } else if (position == secretWebpageRow || position == contactsSyncRow || position == contactsSuggestRow || position == newChatsRow || position == ghostModeRow) {
                 return 3;
             } else if (position == botsAndWebsitesShadowRow) {
                 return 4;

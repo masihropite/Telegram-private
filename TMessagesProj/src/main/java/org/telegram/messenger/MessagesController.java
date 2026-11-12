@@ -10546,6 +10546,27 @@ public class MessagesController extends BaseController implements NotificationCe
         });
     }
 
+    public boolean isGhostModeEnabled() {
+        return getUserConfig().getPreferences().getBoolean("ghostModeEnabled", false);
+    }
+
+    public void setGhostModeEnabled(boolean enabled) {
+        getUserConfig().getPreferences().edit().putBoolean("ghostModeEnabled", enabled).apply();
+        if (enabled) {
+            // Cancel a queued presence request so it cannot outlive the toggle.
+            if (statusRequest != 0) {
+                getConnectionsManager().cancelRequest(statusRequest, true);
+                statusRequest = 0;
+            }
+            statusSettingState = 0;
+        } else {
+            // Force the normal presence timer to publish the current state again.
+            statusSettingState = 0;
+            offlineSent = false;
+            lastStatusUpdateTime = 0;
+        }
+    }
+
     public void updateTimerProc() {
         long currentTime = System.currentTimeMillis();
 
@@ -10553,7 +10574,10 @@ public class MessagesController extends BaseController implements NotificationCe
         checkReadTasks();
 
         if (getUserConfig().isClientActivated()) {
-            if (!ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
+            // Ghost mode is account-scoped through this controller's UserConfig preferences.
+            // Do not send either online or offline presence packets while it is enabled.
+            boolean ghostModeEnabled = isGhostModeEnabled();
+            if (!ghostModeEnabled && !ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
                 if (ApplicationLoader.mainInterfacePausedStageQueueTime != 0 && Math.abs(ApplicationLoader.mainInterfacePausedStageQueueTime - System.currentTimeMillis()) > 1000) {
                     if (statusSettingState != 1 && (lastStatusUpdateTime == 0 || Math.abs(System.currentTimeMillis() - lastStatusUpdateTime) >= 55000 || offlineSent)) {
                         statusSettingState = 1;
@@ -10578,7 +10602,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         });
                     }
                 }
-            } else if (statusSettingState != 2 && !offlineSent && Math.abs(System.currentTimeMillis() - getConnectionsManager().getPauseTime()) >= 2000) {
+            } else if (!ghostModeEnabled && statusSettingState != 2 && !offlineSent && Math.abs(System.currentTimeMillis() - getConnectionsManager().getPauseTime()) >= 2000) {
                 statusSettingState = 2;
                 if (statusRequest != 0) {
                     getConnectionsManager().cancelRequest(statusRequest, true);
