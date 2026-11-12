@@ -468,7 +468,7 @@ public final class HiddenChatsVault {
                 synchronized (CACHED_FILTER_KEYS) {
                     key = CACHED_FILTER_KEYS.get(account);
                     if (key == null) {
-                        String accountAlias = KEYSTORE_ALIAS + "_" + account;
+                        String accountAlias = KEYSTORE_ALIAS;
                         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
                         keyStore.load(null);
                         if (keyStore.containsAlias(accountAlias)) {
