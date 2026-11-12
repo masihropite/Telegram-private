@@ -2186,6 +2186,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 viewOffsetAnimator.cancel();
                 viewOffsetAnimator = null;
             }
+            setViewsOffset(0f);
             setScrollEnabled(true);
         }
 
@@ -7064,9 +7065,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             blurredView.setBackground(null);
         }
         if (viewPages != null) {
+            // A navigation transition can interrupt a smooth scroll before RecyclerView
+            // reports IDLE. Clear the touch-blocking state before the list is shown again.
+            waitingForScrollFinished = false;
+            updatePullAfterScroll = false;
+            disableActionBarScrolling = false;
             for (int a = 0; a < viewPages.length; a++) {
-                // A navigation transition can interrupt the archive offset animation.
-                // Always restore list scrolling when this dialogs screen becomes active again.
                 viewPages[a].listView.resetScrollInteractionState();
                 viewPages[a].dialogsAdapter.notifyDataSetChanged();
             }
