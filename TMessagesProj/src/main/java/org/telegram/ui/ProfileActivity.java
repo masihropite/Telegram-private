@@ -11590,7 +11590,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (avatar == null) {
                 avatarsViewPager.initIfEmpty(vectorAvatarThumbDrawable, imageLocation, thumbLocation, reload);
             }
-            if (avatarBig == null) {
+            // The current user's local public/private visibility switches can change while
+            // this profile screen remains open. Refresh the avatar from the selected
+            // visible photo instead of keeping the previously displayed (now hidden) one.
+            if (avatarBig == null || user.id == getUserConfig().getClientUserId()) {
                 if (vectorAvatar != null) {
                     avatarImage.setImageDrawable(vectorAvatarThumbDrawable);
                 } else if (videoThumbLocation != null && (hideCurrentPhoto || user.photo != null && !user.photo.personal)) {
