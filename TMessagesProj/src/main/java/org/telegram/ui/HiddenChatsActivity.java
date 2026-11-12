@@ -217,7 +217,9 @@ public class HiddenChatsActivity extends BaseFragment {
         args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_DEFAULT);
         args.putBoolean("hiddenChatsMode", true);
         handedOffToHiddenList = true;
-        presentFragment(new DialogsActivity(args));
+        DialogsActivity hiddenDialogs = new DialogsActivity(args);
+        hiddenDialogs.setCurrentAccount(currentAccount);
+        presentFragment(hiddenDialogs);
     }
 
     private void refreshRows() {
