@@ -11614,9 +11614,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             String newString2;
             boolean hiddenStatusButton = false;
             if (user.id == getUserConfig().getClientUserId()) {
+                // The fallback belongs to the public profile photo; hiding the private
+                // photo must not make the public fallback disappear.
                 if (UserObject.hasFallbackPhoto(getUserInfo())
-                        && !org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)
-                        && !org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)) {
+                        && !org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)) {
                     newString2 = "";
                     hasFallbackPhoto = true;
                     TLRPC.PhotoSize smallSize = FileLoader.getClosestPhotoSizeWithSize(getUserInfo().fallback_photo.sizes, 1000);
