@@ -249,6 +249,12 @@ public final class HiddenChatsVault {
                 }
             }
         }
+        if (missingKeys.isEmpty()) {
+            if (onReady != null) {
+                AndroidUtilities.runOnUIThread(onReady);
+            }
+            return;
+        }
         if (pendingIds.isEmpty()) {
             return;
         }
