@@ -346,7 +346,9 @@ public class ApplicationLoader extends Application {
             public void onActivityStopped(Activity activity) {
                 super.onActivityStopped(activity);
                 if (isBackground()) {
-                    HiddenChatsVault.lockActiveVault();
+                    for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+                        HiddenChatsVault.lockActiveVault(account);
+                    }
                 }
             }
         };
