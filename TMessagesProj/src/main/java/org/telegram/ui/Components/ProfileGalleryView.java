@@ -945,35 +945,36 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                         org.telegram.messenger.ApplicationLoader.applicationContext, currentAccount);
                 boolean hidePublic = isSelf && org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(
                         org.telegram.messenger.ApplicationLoader.applicationContext, currentAccount);
-                if (isSelf && user.photo != null) {
-                    boolean hideCurrent = user.photo.personal ? hidePrivate : hidePublic;
-                    if (hideCurrent) {
-                        removePhotoById(arrayList, user.photo.photo_id);
-                    }
+                if (isSelf && hidePrivate && user.photo != null) {
+                    removePhotoById(arrayList, user.photo.photo_id);
                 }
                 if (isSelf && fullUser != null) {
-                    if (hidePrivate && fullUser.personal_photo != null) {
-                        removePhotoById(arrayList, fullUser.personal_photo.id);
+                    // The private side consists of the main/profile and personal
+                    // photos. The public side is specifically fallback_photo.
+                    if (hidePrivate) {
+                        if (fullUser.personal_photo != null) {
+                            removePhotoById(arrayList, fullUser.personal_photo.id);
+                        }
+                        if (fullUser.profile_photo != null) {
+                            removePhotoById(arrayList, fullUser.profile_photo.id);
+                        }
                     }
-                    if (hidePublic && fullUser.profile_photo != null) {
-                        removePhotoById(arrayList, fullUser.profile_photo.id);
-                    }
-                    if ((hidePublic || hidePrivate) && fullUser.fallback_photo != null) {
+                    if (hidePublic && fullUser.fallback_photo != null) {
                         removePhotoById(arrayList, fullUser.fallback_photo.id);
                     }
                 }
                 if (arrayList.isEmpty() && dialogPhotos.fromCache && !(isSelf && (hidePrivate || hidePublic))) {
                     return;
                 }
-                if (fullUser != null && fullUser.personal_photo != null && !hidePrivate) {
+                if (fullUser != null && fullUser.personal_photo != null && !hidePrivate
+                        && !containsPhotoId(arrayList, fullUser.personal_photo.id)) {
                     arrayList.add(0, fullUser.personal_photo);
                     customAvatarIndex = 0;
                 }
-                if (isSelf && hidePrivate && fullUser != null && fullUser.profile_photo != null
-                        && !containsPhotoId(arrayList, fullUser.profile_photo.id)) {
-                    arrayList.add(0, fullUser.profile_photo);
-                }
-                if (isSelf && UserObject.hasFallbackPhoto(fullUser) && !hidePublic && !hidePrivate) {
+                // If private is hidden, the public fallback remains the only
+                // permitted profile image (unless public is hidden as well).
+                if (isSelf && UserObject.hasFallbackPhoto(fullUser) && !hidePublic) {
+                    removePhotoById(arrayList, fullUser.fallback_photo.id);
                     arrayList.add(fullUser.fallback_photo);
                     fallbackPhotoIndex = arrayList.size() - 1;
                 }
