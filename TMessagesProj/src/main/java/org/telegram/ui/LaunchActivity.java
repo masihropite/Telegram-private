@@ -6953,7 +6953,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onStop() {
-        HiddenChatsVault.lockActiveVault();
+        HiddenChatsVault.lockActiveVault(currentAccount);
         super.onStop();
         GramWalletStorageAuth.onActivityStopped(this);
         isStarted = false;
