@@ -165,16 +165,18 @@ public class ImageLocation {
     }
 
     public static boolean isOwnProfilePhotoHidden(int currentAccount, TLRPC.User user) {
-        if (user == null || user.photo == null || user.id != UserConfig.getInstance(currentAccount).getClientUserId()) {
+        // The private profile photo is the account's main user.photo. The
+        // public fallback_photo is handled separately and must not cause the
+        // private photo to disappear when only the public switch is enabled.
+        if (user == null || user.id != UserConfig.getInstance(currentAccount).getClientUserId()) {
             return false;
         }
-        return user.photo.personal
-                ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
-                : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+        return LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
     }
 
     public static TLRPC.Photo getOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user) {
-        if (!isOwnProfilePhotoHidden(currentAccount, user)) {
+        if (!isOwnProfilePhotoHidden(currentAccount, user)
+                || LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)) {
             return null;
         }
         TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
@@ -182,24 +184,12 @@ public class ImageLocation {
             return null;
         }
 
-        // Never replace a hidden photo with another photo that is also hidden.
-        if (user.photo.personal) {
-            if (LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)) {
-                return null;
-            }
-            TLRPC.Photo publicPhoto = userFull.profile_photo;
-            if (publicPhoto != null && publicPhoto.id != user.photo.photo_id) {
-                return publicPhoto;
-            }
-            TLRPC.Photo fallbackPhoto = userFull.fallback_photo;
-            return fallbackPhoto != null && fallbackPhoto.id != user.photo.photo_id ? fallbackPhoto : null;
-        } else {
-            if (LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)) {
-                return null;
-            }
-            TLRPC.Photo privatePhoto = userFull.personal_photo;
-            return privatePhoto != null && privatePhoto.id != user.photo.photo_id ? privatePhoto : null;
-        }
+        // When the private photo is hidden, only the public fallback photo is
+        // an allowed replacement. Never substitute profile_photo/personal_photo
+        // because those represent the private side of this profile.
+        TLRPC.Photo publicPhoto = userFull.fallback_photo;
+        return publicPhoto != null && (user.photo == null || publicPhoto.id != user.photo.photo_id)
+                ? publicPhoto : null;
     }
 
     private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type) {
