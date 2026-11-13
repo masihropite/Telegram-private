@@ -164,22 +164,40 @@ public class ImageLocation {
         return getForUser(UserConfig.selectedAccount, user, type);
     }
 
+    private static int getOwningAccountForProfileUser(int preferredAccount, TLRPC.User user) {
+        if (user == null) {
+            return -1;
+        }
+        if (UserConfig.getInstance(preferredAccount).getClientUserId() == user.id) {
+            return preferredAccount;
+        }
+        // Account switcher rows can render another signed-in account while
+        // the currently selected account is different. Resolve settings by
+        // the actual owner of this user id, not by the active account slot.
+        for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
+            if (account != preferredAccount && UserConfig.getInstance(account).getClientUserId() == user.id) {
+                return account;
+            }
+        }
+        return -1;
+    }
+
     public static boolean isOwnProfilePhotoHidden(int currentAccount, TLRPC.User user) {
         // The private profile photo is the account's main user.photo. The
         // public fallback_photo is handled separately and must not cause the
         // private photo to disappear when only the public switch is enabled.
-        if (user == null || user.id != UserConfig.getInstance(currentAccount).getClientUserId()) {
-            return false;
-        }
-        return LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+        int ownerAccount = getOwningAccountForProfileUser(currentAccount, user);
+        return ownerAccount >= 0 && LocalProfilePhotoSettings.isPrivateHidden(
+                ApplicationLoader.applicationContext, ownerAccount);
     }
 
     public static TLRPC.Photo getOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user) {
-        if (!isOwnProfilePhotoHidden(currentAccount, user)
-                || LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)) {
+        int ownerAccount = getOwningAccountForProfileUser(currentAccount, user);
+        if (ownerAccount < 0 || !isOwnProfilePhotoHidden(ownerAccount, user)
+                || LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, ownerAccount)) {
             return null;
         }
-        TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
+        TLRPC.UserFull userFull = MessagesController.getInstance(ownerAccount).getUserFull(user.id);
         if (userFull == null) {
             return null;
         }
