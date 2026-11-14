@@ -4996,6 +4996,11 @@ public class MediaDataController extends BaseController {
     private static RectF bitmapRect;
     private static Path roundPath;
 
+    private TLRPC.FileLocation getVisibleProfilePhotoLocation(TLRPC.User user) {
+        ImageLocation location = ImageLocation.getForUser(currentAccount, user, ImageLocation.TYPE_SMALL);
+        return location == null ? null : location.location;
+    }
+
     public void buildShortcuts() {
         if (Build.VERSION.SDK_INT < 23) {
             return;
@@ -5102,7 +5107,7 @@ public class MediaDataController extends BaseController {
                     if (user != null) {
                         name = ContactsController.formatName(user.first_name, user.last_name);
                         if (user.photo != null) {
-                            photo = user.photo.photo_small;
+                            photo = getVisibleProfilePhotoLocation(user);
                         }
                     } else {
                         name = chat.title;
@@ -5730,7 +5735,7 @@ public class MediaDataController extends BaseController {
                 if (type == SHORTCUT_TYPE_ATTACHED_BOT) {
                     name = UserObject.getUserName(MessagesController.getInstance(currentAccount).getUser(dialogId));
                     if (user.photo != null) {
-                        photo = user.photo.photo_small;
+                        photo = getVisibleProfilePhotoLocation(user);
                     }
                 } else if (UserObject.isReplyUser(user)) {
                     name = LocaleController.getString(R.string.RepliesTitle);
@@ -5741,7 +5746,7 @@ public class MediaDataController extends BaseController {
                 } else {
                     name = ContactsController.formatName(user.first_name, user.last_name);
                     if (user.photo != null) {
-                        photo = user.photo.photo_small;
+                        photo = getVisibleProfilePhotoLocation(user);
                     }
                 }
             } else {
