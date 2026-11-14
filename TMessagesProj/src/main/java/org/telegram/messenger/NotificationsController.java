@@ -4181,6 +4181,11 @@ public class NotificationsController extends BaseController implements Notificat
         return channelId;
     }
 
+    private TLRPC.FileLocation getVisibleProfilePhotoLocation(TLRPC.User user) {
+        ImageLocation location = ImageLocation.getForUser(currentAccount, user, ImageLocation.TYPE_SMALL);
+        return location == null ? null : location.location;
+    }
+
     private void showOrUpdateNotification(boolean notifyAboutLast) {
         if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
             dismissNotification();
@@ -4652,7 +4657,7 @@ public class NotificationsController extends BaseController implements Notificat
                             }
                         } else if (user != null) {
                             if (user.photo != null && user.photo.photo_small != null && user.photo.photo_small.volume_id != 0 && user.photo.photo_small.local_id != 0) {
-                                photoPath = user.photo.photo_small;
+                                photoPath = getVisibleProfilePhotoLocation(user);
                             }
                         }
                     }
@@ -5071,7 +5076,7 @@ public class NotificationsController extends BaseController implements Notificat
                     name = LocaleController.formatPluralString("Stories", storyPushMessages.size());
                 }
                 if (user != null && user.photo != null && user.photo.photo_small != null && user.photo.photo_small.volume_id != 0 && user.photo.photo_small.local_id != 0) {
-                    photoPath = user.photo.photo_small;
+                    photoPath = getVisibleProfilePhotoLocation(user);
                 }
             } else if (!DialogObject.isEncryptedDialog(dialogId)) {
                 canReply = (lastMessageObject != null && !lastMessageObject.isReactionPush && !lastMessageObject.isStoryReactionPush) && dialogId != 777000;
@@ -5089,7 +5094,7 @@ public class NotificationsController extends BaseController implements Notificat
                     } else {
                         name = UserObject.getUserName(user);
                         if (user.photo != null && user.photo.photo_small != null && user.photo.photo_small.volume_id != 0 && user.photo.photo_small.local_id != 0) {
-                            photoPath = user.photo.photo_small;
+                            photoPath = getVisibleProfilePhotoLocation(user);
                         }
                     }
                     if (dialogId == UserObject.OAUTH) {
@@ -5139,7 +5144,7 @@ public class NotificationsController extends BaseController implements Notificat
                     if (DialogObject.isUserDialog(did)) {
                         TLRPC.User fwduser = getMessagesController().getUser(did);
                         if (fwduser.photo != null && fwduser.photo.photo_small != null && fwduser.photo.photo_small.volume_id != 0 && fwduser.photo.photo_small.local_id != 0) {
-                            photoPath = fwduser.photo.photo_small;
+                            photoPath = getVisibleProfilePhotoLocation(fwduser);
                         }
                     } else {
                         TLRPC.Chat fwdchat = getMessagesController().getChat(-did);
