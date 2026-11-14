@@ -66,6 +66,13 @@ public final class HiddenChatsVault {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final ConcurrentHashMap<Integer, SecretKey> CACHED_FILTER_KEYS = new ConcurrentHashMap<Integer, SecretKey>();
+    private static final ThreadLocal<ConcurrentHashMap<Integer, Mac>> FILTER_MACS =
+            new ThreadLocal<ConcurrentHashMap<Integer, Mac>>() {
+                @Override
+                protected ConcurrentHashMap<Integer, Mac> initialValue() {
+                    return new ConcurrentHashMap<Integer, Mac>();
+                }
+            };
     private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
     private static final Object FILTER_CACHE_LOCK = new Object();
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
@@ -485,8 +492,13 @@ public final class HiddenChatsVault {
                     }
                 }
             }
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(key);
+            ConcurrentHashMap<Integer, Mac> threadMacs = FILTER_MACS.get();
+            Mac mac = threadMacs.get(account);
+            if (mac == null) {
+                mac = Mac.getInstance("HmacSHA256");
+                mac.init(key);
+                threadMacs.put(account, mac);
+            }
             byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
             return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
         } catch (GeneralSecurityException e) {

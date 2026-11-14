@@ -200,6 +200,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     }
 
     private NotificationCenter.ObserversGroup observersGroup;
+    private NotificationCenter.ObserversGroup accountObserversGroup;
 
     @Override
     public boolean onFragmentCreate() {
@@ -207,12 +208,20 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             observersGroup.removeAllObservers();
             observersGroup = null;
         }
+        if (accountObserversGroup != null) {
+            accountObserversGroup.removeAllObservers();
+            accountObserversGroup = null;
+        }
 
         observersGroup = NotificationCenter.getGlobalInstance()
             .createObserversGroup(this)
             .add(NotificationCenter.updateInterfaces)
             .add(NotificationCenter.starBalanceUpdated)
             .add(NotificationCenter.newSuggestionsAvailable);
+
+        accountObserversGroup = NotificationCenter.getInstance(currentAccount)
+            .createObserversGroup(this)
+            .add(NotificationCenter.mainUserInfoChanged);
 
         if (arguments != null) {
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
@@ -499,11 +508,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             observersGroup.removeAllObservers();
             observersGroup = null;
         }
+        if (accountObserversGroup != null) {
+            accountObserversGroup.removeAllObservers();
+            accountObserversGroup = null;
+        }
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.starBalanceUpdated) {
+        if (id == NotificationCenter.mainUserInfoChanged && account == currentAccount) {
+            setInfo();
+        } else if (id == NotificationCenter.starBalanceUpdated) {
             setInfo();
             if (listView != null) {
                 listView.adapter.update(true);

@@ -50,16 +50,13 @@ public final class LocalProfilePhotoSettings {
     }
 
     /**
-     * Changes only the requested local visibility switch. Both switches may
-     * never be enabled together; at least one profile photo remains visible.
+     * Changes only the requested local visibility switch. The private and
+     * public switches are independent and may both be enabled; in that case
+     * ImageLocation returns no profile photo and the UI displays its avatar.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
         SharedPreferences preferences = getPreferences(context, account);
         String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
-        String otherKey = privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE;
-        if (hidden && preferences.getBoolean(otherKey, false)) {
-            return false;
-        }
         return preferences.edit().putBoolean(key, hidden).commit();
     }
 }
