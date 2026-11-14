@@ -57,6 +57,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.LocalProfilePhotoSettings;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
@@ -132,6 +133,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
 
     private int currentType;
     private int currentSubType;
+    private boolean showLocalPrivatePhotoPrivacyUi;
 
     private long initialStars;
     private long currentStars = 10;
@@ -509,6 +511,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
     public boolean onFragmentCreate() {
         super.onFragmentCreate();
         checkPrivacy();
+        showLocalPrivatePhotoPrivacyUi = rulesType == PRIVACY_RULES_TYPE_PHOTO && LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
         prepareHiddenPrivacyFilterCache();
         updateRows(false);
         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.privacyRulesUpdated);
@@ -689,6 +692,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 ).show();
                 BotWebViewVibrationEffect.APP_ERROR.vibrate();
                 AndroidUtilities.shakeViewSpring(view, shakeDp = -shakeDp);
+            } else if (showLocalPrivatePhotoPrivacyUi && (position == nobodyRow || position == everybodyRow || position == myContactsRow || position == payRow || position == alwaysShareRow || position == neverShareRow)) {
+                AndroidUtilities.shakeViewSpring(view, shakeDp = -shakeDp);
+                return;
             } else if (position == nobodyRow || position == everybodyRow || position == myContactsRow || position == payRow) {
                 if (rulesType == PRIVACY_RULES_TYPE_GIFTS && areAllStarGiftsDisabled()) {
                     AndroidUtilities.shakeViewSpring(view, shakeDp = -shakeDp);
@@ -743,11 +749,11 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 }
                 final boolean allowMiniapps;
                 if (rulesType == PRIVACY_RULES_TYPE_GIFTS) {
-                    if (currentType == TYPE_NOBODY) {
+                    if (displayPrivacyType == TYPE_NOBODY) {
                         allowMiniapps = (position == alwaysShareRow);
-                    } else if (currentType == TYPE_CONTACTS) {
+                    } else if (displayPrivacyType == TYPE_CONTACTS) {
                         allowMiniapps = (position == alwaysShareRow);
-                    } else if (currentType == TYPE_EVERYBODY) {
+                    } else if (displayPrivacyType == TYPE_EVERYBODY) {
                         allowMiniapps = (position == neverShareRow);
                     } else allowMiniapps = false;
                 } else allowMiniapps = false;
@@ -915,6 +921,8 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.privacyRulesUpdated) {
             checkPrivacy();
+            showLocalPrivatePhotoPrivacyUi = rulesType == PRIVACY_RULES_TYPE_PHOTO && LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+            prepareHiddenPrivacyFilterCache();
         } else if (id == NotificationCenter.emojiLoaded) {
             listView.invalidateViews();
         } else if (id == NotificationCenter.didSetNewWallpapper) {
@@ -973,6 +981,10 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
     }
 
     private void updateDoneButton() {
+        if (showLocalPrivatePhotoPrivacyUi) {
+            doneButton.setActive(false, false);
+            return;
+        }
         doneButton.setActive(hasChanges(), true);
     }
 
@@ -1006,7 +1018,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
 
             final boolean[] done = new boolean[2];
             done[0] = true;
-            if (currentType == TYPE_PAY) {
+            if (displayPrivacyType == TYPE_PAY) {
                 Collections.sort(initialPlus);
                 Collections.sort(currentPlus);
                 if (!initialPlus.equals(currentPlus)) {
@@ -1841,7 +1853,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
             return position == p2pRow && !ContactsController.getInstance(currentAccount).getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_P2P) ||
                     position == currentPhotoForRestRow || position == photoForRestDescriptionRow || position == photoForRestRow || position == readRow || position == showGiftIconRow || position == readPremiumRow ||
                     position == giftTypeUniqueRow || position == giftTypeChannelsRow || position == giftTypePremiumRow || position == giftTypeLimitedRow || position == giftTypeUnlimitedRow ||
-                    (rulesType != PRIVACY_RULES_TYPE_GIFTS || !areAllStarGiftsDisabled()) && (position == nobodyRow || position == myContactsRow || position == payRow || position == everybodyRow || position == neverShareRow || position == alwaysShareRow);
+                    !showLocalPrivatePhotoPrivacyUi && (rulesType != PRIVACY_RULES_TYPE_GIFTS || !areAllStarGiftsDisabled()) && (position == nobodyRow || position == myContactsRow || position == payRow || position == everybodyRow || position == neverShareRow || position == alwaysShareRow);
         }
 
         @Override
@@ -1972,7 +1984,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     ThemeBind.textColor(textCell.getTextView(), Theme.key_windowBackgroundWhiteBlackText, PrivacyControlActivity.this.getResourceProvider());
                     if (position == alwaysShareRow) {
                         String value;
-                        if (currentPlus.size() != 0) {
+                        if (showLocalPrivatePhotoPrivacyUi) {
+                            value = LocaleController.getString(R.string.EmpryUsersPlaceholder);
+                        } else if (getUsersCount(currentPlus) != 0) {
                             value = LocaleController.formatPluralString("Users", getUsersCount(currentPlus));
                         } else {
                             value = LocaleController.getString(R.string.EmpryUsersPlaceholder);
@@ -2006,7 +2020,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     } else if (position == neverShareRow) {
                         String value;
                         int count = 0;
-                        if (currentMinus.size() != 0) {
+                        if (getUsersCount(currentMinus) != 0) {
                             value = LocaleController.formatPluralString("Users", getUsersCount(currentMinus));
                         } else {
                             value = LocaleController.getString(R.string.EmpryUsersPlaceholder);
@@ -2253,6 +2267,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 case 3:
                     RadioCell radioCell = (RadioCell) holder.itemView;
                     radioCell.setRadioIcon(null);
+                    int displayPrivacyType = showLocalPrivatePhotoPrivacyUi ? TYPE_EVERYBODY : currentType;
                     if (position == everybodyRow || position == myContactsRow || position == nobodyRow || position == payRow) {
                         if (position == everybodyRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
