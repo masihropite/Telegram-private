@@ -43,6 +43,7 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
@@ -1521,8 +1522,10 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                                         }
                                     }
                                 }
-                                notifyDataSetChanged();
-                                delegate.needChangePanelVisibility(!searchResultUsernames.isEmpty());
+                                filterHiddenMentionResults(() -> {
+                                    notifyDataSetChanged();
+                                    delegate.needChangePanelVisibility(searchResultUsernames != null && !searchResultUsernames.isEmpty());
+                                });
                             }
                             channelReqId = 0;
                         }));
@@ -1651,6 +1654,33 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
     }
 
     private void showUsersResult(ArrayList<TLObject> newResult, LongSparseArray<TLObject> newMap, boolean notify) {
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+        if (vault != null && newResult != null) {
+            ArrayList<Long> dialogIds = new ArrayList<>();
+            for (TLObject object : newResult) {
+                if (object instanceof TLRPC.User) {
+                    dialogIds.add(((TLRPC.User) object).id);
+                }
+            }
+            vault.prepareDialogFilterCache(dialogIds, () -> {
+                Iterator<TLObject> iterator = newResult.iterator();
+                while (iterator.hasNext()) {
+                    TLObject object = iterator.next();
+                    if (object instanceof TLRPC.User && vault.isDialogHiddenForFiltering(((TLRPC.User) object).id)) {
+                        if (newMap != null) {
+                            newMap.remove(((TLRPC.User) object).id);
+                        }
+                        iterator.remove();
+                    }
+                }
+                showUsersResultInternal(newResult, newMap, notify);
+            });
+            return;
+        }
+        showUsersResultInternal(newResult, newMap, notify);
+    }
+
+    private void showUsersResultInternal(ArrayList<TLObject> newResult, LongSparseArray<TLObject> newMap, boolean notify) {
         searchResultUsernames = newResult;
         if ((!allowBots || !allowChats) && searchResultUsernames != null) {
             Iterator<TLObject> i = searchResultUsernames.iterator();
@@ -1674,6 +1704,34 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
             notifyDataSetChanged();
             delegate.needChangePanelVisibility(!searchResultUsernames.isEmpty());
         }
+    }
+
+    private void filterHiddenMentionResults(Runnable onFiltered) {
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+        if (vault == null || searchResultUsernames == null) {
+            if (onFiltered != null) onFiltered.run();
+            return;
+        }
+        ArrayList<Long> dialogIds = new ArrayList<>();
+        for (TLObject object : searchResultUsernames) {
+            if (object instanceof TLRPC.User) {
+                dialogIds.add(((TLRPC.User) object).id);
+            }
+        }
+        vault.prepareDialogFilterCache(dialogIds, () -> {
+            if (searchResultUsernames != null) {
+                Iterator<TLObject> iterator = searchResultUsernames.iterator();
+                while (iterator.hasNext()) {
+                    TLObject object = iterator.next();
+                    if (object instanceof TLRPC.User && vault.isDialogHiddenForFiltering(((TLRPC.User) object).id)) {
+                        long userId = ((TLRPC.User) object).id;
+                        if (searchResultUsernamesMap != null) searchResultUsernamesMap.remove(userId);
+                        iterator.remove();
+                    }
+                }
+            }
+            if (onFiltered != null) onFiltered.run();
+        });
     }
 
     public int getResultStartPosition() {
