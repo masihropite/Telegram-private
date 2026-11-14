@@ -48,6 +48,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserObject;
@@ -327,6 +328,55 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
             initialProfiles = profiles = currentChat.signature_profiles;
         }
 
+    }
+
+    private long getHiddenFilterUserId(TLObject object) {
+        if (object instanceof TLRPC.User) {
+            return ((TLRPC.User) object).id;
+        } else if (object instanceof TLRPC.ChatParticipant) {
+            return ((TLRPC.ChatParticipant) object).user_id;
+        } else if (object instanceof TLRPC.ChannelParticipant) {
+            return MessageObject.getPeerId(((TLRPC.ChannelParticipant) object).peer);
+        }
+        return 0;
+    }
+
+    private void filterHiddenGroupMemberLists(Runnable onFiltered) {
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+        if (vault == null) {
+            if (onFiltered != null) onFiltered.run();
+            return;
+        }
+        ArrayList<Long> dialogIds = new ArrayList<>();
+        for (TLObject object : participants) {
+            long id = getHiddenFilterUserId(object);
+            if (id > 0) dialogIds.add(id);
+        }
+        for (TLObject object : contacts) {
+            long id = getHiddenFilterUserId(object);
+            if (id > 0) dialogIds.add(id);
+        }
+        for (TLObject object : bots) {
+            long id = getHiddenFilterUserId(object);
+            if (id > 0) dialogIds.add(id);
+        }
+        vault.prepareDialogFilterCache(dialogIds, () -> {
+            filterHiddenMembersFromList(participants, participantsMap, vault);
+            filterHiddenMembersFromList(contacts, contactsMap, vault);
+            filterHiddenMembersFromList(bots, botsMap, vault);
+            if (onFiltered != null) onFiltered.run();
+        });
+    }
+
+    private void filterHiddenMembersFromList(ArrayList<TLObject> items, LongSparseArray<TLObject> map, HiddenChatsVault vault) {
+        java.util.Iterator<TLObject> iterator = items.iterator();
+        while (iterator.hasNext()) {
+            long id = getHiddenFilterUserId(iterator.next());
+            if (id > 0 && vault.isDialogHiddenForFiltering(id)) {
+                iterator.remove();
+                if (map != null) map.remove(id);
+            }
+        }
     }
 
     private void updateRows() {
@@ -2463,10 +2513,12 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                 }
             }
 
-            updateRows();
-            if (listViewAdapter != null) {
-                listViewAdapter.notifyDataSetChanged();
-            }
+            filterHiddenGroupMemberLists(() -> {
+                updateRows();
+                if (listViewAdapter != null) {
+                    listViewAdapter.notifyDataSetChanged();
+                }
+            });
         } else if (!ChatObject.isChannel(currentChat)) {
             loadingUsers = false;
             participants.clear();
@@ -2522,12 +2574,21 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     }
                 }
             }
-            if (listViewAdapter != null) {
-                listViewAdapter.notifyDataSetChanged();
-            }
-            updateRows();
-            if (listViewAdapter != null) {
-                listViewAdapter.notifyDataSetChanged();
+            if (type == TYPE_USERS || type == TYPE_ADMIN) {
+                filterHiddenGroupMemberLists(() -> {
+                    updateRows();
+                    if (listViewAdapter != null) {
+                        listViewAdapter.notifyDataSetChanged();
+                    }
+                });
+            } else {
+                if (listViewAdapter != null) {
+                    listViewAdapter.notifyDataSetChanged();
+                }
+                updateRows();
+                if (listViewAdapter != null) {
+                    listViewAdapter.notifyDataSetChanged();
+                }
             }
         } else {
             loadingUsers = true;
@@ -2635,16 +2696,23 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                         searchItem.setVisibility(type != TYPE_BANNED || firstLoaded && objectsCount > 5 ? View.VISIBLE : View.GONE);
                     }
                 }
-                updateRows();
-                if (listViewAdapter != null) {
-                    listView.setAnimateEmptyView(openTransitionStarted, RecyclerListView.EMPTY_VIEW_ANIMATION_TYPE_ALPHA);
-                    listViewAdapter.notifyDataSetChanged();
+                Runnable updateFilteredRows = () -> {
+                    updateRows();
+                    if (listViewAdapter != null) {
+                        listView.setAnimateEmptyView(openTransitionStarted, RecyclerListView.EMPTY_VIEW_ANIMATION_TYPE_ALPHA);
+                        listViewAdapter.notifyDataSetChanged();
 
-                    if (emptyView != null && listViewAdapter.getItemCount() == 0 && firstLoaded) {
-                        emptyView.showProgress(false, true);
+                        if (emptyView != null && listViewAdapter.getItemCount() == 0 && firstLoaded) {
+                            emptyView.showProgress(false, true);
+                        }
                     }
+                    resumeDelayedFragmentAnimation();
+                };
+                if (type == TYPE_USERS || type == TYPE_ADMIN) {
+                    filterHiddenGroupMemberLists(updateFilteredRows);
+                } else {
+                    updateFilteredRows.run();
                 }
-                resumeDelayedFragmentAnimation();
             };
             AtomicInteger responsesReceived = new AtomicInteger(0);
             for (int i = 0; i < requests.size(); ++i) {
