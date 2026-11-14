@@ -3028,27 +3028,58 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                 if (!searching) {
                     return;
                 }
-                searchInProgress = false;
-                searchResult = users;
-                searchResultMap = usersMap;
-                searchResultNames = names;
-                searchAdapterHelper.mergeResults(searchResult);
-                if (!ChatObject.isChannel(currentChat)) {
-                    ArrayList<TLObject> search = searchAdapterHelper.getGroupSearch();
-                    search.clear();
-                    search.addAll(participants);
-                }
-                int oldItemCount = getItemCount();
-                notifyDataSetChanged();
-                if (getItemCount() > oldItemCount) {
-                    showItemsAnimated(oldItemCount);
-                }
-                if (!searchAdapterHelper.isSearchInProgress()) {
-                    if (getItemCount() == 0) {
-                        emptyView.showProgress(false, true);
+                HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+                if (vault != null) {
+                    ArrayList<Long> ids = new ArrayList<>();
+                    for (Object object : users) {
+                        if (object instanceof TLRPC.User) {
+                            ids.add(((TLRPC.User) object).id);
+                        }
                     }
+                    vault.prepareDialogFilterCache(ids, () -> {
+                        ArrayList<Object> visibleUsers = new ArrayList<>();
+                        ArrayList<CharSequence> visibleNames = new ArrayList<>();
+                        for (int i = 0; i < users.size(); i++) {
+                            Object object = users.get(i);
+                            if (object instanceof TLRPC.User && vault.isDialogHiddenForFiltering(((TLRPC.User) object).id)) {
+                                if (usersMap != null) usersMap.remove(((TLRPC.User) object).id);
+                                continue;
+                            }
+                            visibleUsers.add(object);
+                            visibleNames.add(names != null && i < names.size() ? names.get(i) : null);
+                        }
+                        applySearchResults(visibleUsers, usersMap, visibleNames, participants);
+                    });
+                } else {
+                    applySearchResults(users, usersMap, names, participants);
                 }
             });
+        }
+
+        private void applySearchResults(ArrayList<Object> users, LongSparseArray<TLObject> usersMap, ArrayList<CharSequence> names, ArrayList<TLObject> participants) {
+            if (!searching) {
+                return;
+            }
+            searchInProgress = false;
+            searchResult = users;
+            searchResultMap = usersMap;
+            searchResultNames = names;
+            searchAdapterHelper.mergeResults(searchResult);
+            if (!ChatObject.isChannel(currentChat)) {
+                ArrayList<TLObject> search = searchAdapterHelper.getGroupSearch();
+                search.clear();
+                search.addAll(participants);
+            }
+            int oldItemCount = getItemCount();
+            notifyDataSetChanged();
+            if (getItemCount() > oldItemCount) {
+                showItemsAnimated(oldItemCount);
+            }
+            if (!searchAdapterHelper.isSearchInProgress()) {
+                if (getItemCount() == 0) {
+                    emptyView.showProgress(false, true);
+                }
+            }
         }
 
         @Override
