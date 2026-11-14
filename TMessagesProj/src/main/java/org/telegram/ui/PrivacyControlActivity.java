@@ -749,11 +749,11 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 }
                 final boolean allowMiniapps;
                 if (rulesType == PRIVACY_RULES_TYPE_GIFTS) {
-                    if (displayPrivacyType == TYPE_NOBODY) {
+                    if (currentType == TYPE_NOBODY) {
                         allowMiniapps = (position == alwaysShareRow);
-                    } else if (displayPrivacyType == TYPE_CONTACTS) {
+                    } else if (currentType == TYPE_CONTACTS) {
                         allowMiniapps = (position == alwaysShareRow);
-                    } else if (displayPrivacyType == TYPE_EVERYBODY) {
+                    } else if (currentType == TYPE_EVERYBODY) {
                         allowMiniapps = (position == neverShareRow);
                     } else allowMiniapps = false;
                 } else allowMiniapps = false;
@@ -1018,7 +1018,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
 
             final boolean[] done = new boolean[2];
             done[0] = true;
-            if (displayPrivacyType == TYPE_PAY) {
+            if (currentType == TYPE_PAY) {
                 Collections.sort(initialPlus);
                 Collections.sort(currentPlus);
                 if (!initialPlus.equals(currentPlus)) {
@@ -2271,34 +2271,34 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     if (position == everybodyRow || position == myContactsRow || position == nobodyRow || position == payRow) {
                         if (position == everybodyRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
-                                radioCell.setText(LocaleController.getString(R.string.P2PEverybody), currentType == TYPE_EVERYBODY, true);
+                                radioCell.setText(LocaleController.getString(R.string.P2PEverybody), displayPrivacyType == TYPE_EVERYBODY, true);
                             } else {
-                                radioCell.setText(LocaleController.getString(R.string.LastSeenEverybody), currentType == TYPE_EVERYBODY, true);
+                                radioCell.setText(LocaleController.getString(R.string.LastSeenEverybody), displayPrivacyType == TYPE_EVERYBODY, true);
                             }
                         } else if (position == myContactsRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_VOICE_MESSAGES && !getUserConfig().isPremium() || rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getMessagesController().newNoncontactPeersRequirePremiumWithoutOwnpremium && !getUserConfig().isPremium()) {
                                 radioCell.setRadioIcon(getContext().getResources().getDrawable(R.drawable.mini_switch_lock).mutate());
                             }
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
-                                radioCell.setText(LocaleController.getString(R.string.P2PContacts), currentType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
+                                radioCell.setText(LocaleController.getString(R.string.P2PContacts), displayPrivacyType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
                             } else if (rulesType == PRIVACY_RULES_TYPE_MESSAGES) {
-                                radioCell.setText(LocaleController.getString(R.string.PrivacyMessagesContactsAndPremium), currentType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
+                                radioCell.setText(LocaleController.getString(R.string.PrivacyMessagesContactsAndPremium), displayPrivacyType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
                             } else {
-                                radioCell.setText(LocaleController.getString(R.string.LastSeenContacts), currentType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
+                                radioCell.setText(LocaleController.getString(R.string.LastSeenContacts), displayPrivacyType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
                             }
                         } else if (position == payRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getUserConfig().isPremium()/* || rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getMessagesController().newNoncontactPeersRequirePremiumWithoutOwnpremium && !getUserConfig().isPremium()*/) {
                                 radioCell.setRadioIcon(getContext().getResources().getDrawable(R.drawable.mini_switch_lock).mutate());
                             }
-                            radioCell.setText(getString(R.string.PrivateMessagesChargePrice), currentType == TYPE_PAY, false);
+                            radioCell.setText(getString(R.string.PrivateMessagesChargePrice), displayPrivacyType == TYPE_PAY, false);
                         } else {
                             if (rulesType == PRIVACY_RULES_TYPE_VOICE_MESSAGES && !getUserConfig().isPremium() || rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getMessagesController().newNoncontactPeersRequirePremiumWithoutOwnpremium && !getUserConfig().isPremium()) {
                                 radioCell.setRadioIcon(getContext().getResources().getDrawable(R.drawable.mini_switch_lock).mutate());
                             }
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
-                                radioCell.setText(LocaleController.getString(R.string.P2PNobody), currentType == TYPE_NOBODY, false);
+                                radioCell.setText(LocaleController.getString(R.string.P2PNobody), displayPrivacyType == TYPE_NOBODY, false);
                             } else {
-                                radioCell.setText(LocaleController.getString(R.string.LastSeenNobody), currentType == TYPE_NOBODY, false);
+                                radioCell.setText(LocaleController.getString(R.string.LastSeenNobody), displayPrivacyType == TYPE_NOBODY, false);
                             }
                         }
                     } else {
