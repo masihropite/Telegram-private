@@ -1712,9 +1712,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
                     continue;
                 }
                 visibleUsers.add(item);
-                if (names != null && i < names.size()) {
-                    visibleNames.add(names.get(i));
-                }
+                visibleNames.add(names != null && i < names.size() ? names.get(i) : null);
             }
             searchResult = visibleUsers;
             searchResultNames = visibleNames;
