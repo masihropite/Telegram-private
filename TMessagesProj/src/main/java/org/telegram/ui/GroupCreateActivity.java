@@ -49,6 +49,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -1677,16 +1678,52 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
                 if (!searching) {
                     return;
                 }
-                searchRunnable = null;
-                searchResult = users;
-                searchResultNames = names;
-                searchAdapterHelper.mergeResults(searchResult);
-                showItemsAnimated(currentItemsCount);
-                notifyDataSetChanged();
-                if (searching && !searchAdapterHelper.isSearchInProgress() && getItemCount() == 0) {
-                    emptyView.showProgress(false, true);
+                if (isAlwaysShare || isNeverShare) {
+                    HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+                    if (vault != null) {
+                        ArrayList<Long> ids = new ArrayList<>();
+                        for (Object item : users) {
+                            if (item instanceof TLRPC.User) {
+                                ids.add(((TLRPC.User) item).id);
+                            }
+                        }
+                        vault.prepareDialogFilterCache(ids, () -> applySearchResultsWithoutHiddenChats(users, names, vault));
+                        if (!ids.isEmpty()) {
+                            searchRunnable = null;
+                            return;
+                        }
+                    }
                 }
+                applySearchResultsWithoutHiddenChats(users, names, null);
             });
+        }
+
+        private void applySearchResultsWithoutHiddenChats(ArrayList<Object> users, ArrayList<CharSequence> names, HiddenChatsVault vault) {
+            if (!searching) {
+                return;
+            }
+            searchRunnable = null;
+            ArrayList<Object> visibleUsers = new ArrayList<>();
+            ArrayList<CharSequence> visibleNames = new ArrayList<>();
+            for (int i = 0; i < users.size(); i++) {
+                Object item = users.get(i);
+                if (vault != null && item instanceof TLRPC.User
+                        && vault.isDialogHiddenForFiltering(((TLRPC.User) item).id)) {
+                    continue;
+                }
+                visibleUsers.add(item);
+                if (names != null && i < names.size()) {
+                    visibleNames.add(names.get(i));
+                }
+            }
+            searchResult = visibleUsers;
+            searchResultNames = visibleNames;
+            searchAdapterHelper.mergeResults(searchResult);
+            showItemsAnimated(currentItemsCount);
+            notifyDataSetChanged();
+            if (searching && !searchAdapterHelper.isSearchInProgress() && getItemCount() == 0) {
+                emptyView.showProgress(false, true);
+            }
         }
     }
 
