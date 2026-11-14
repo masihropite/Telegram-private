@@ -52,6 +52,7 @@ import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
@@ -508,6 +509,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
     public boolean onFragmentCreate() {
         super.onFragmentCreate();
         checkPrivacy();
+        prepareHiddenPrivacyFilterCache();
         updateRows(false);
         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.privacyRulesUpdated);
         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.didSetNewWallpapper);
@@ -754,10 +756,12 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 if (rulesType == PRIVACY_RULES_TYPE_MESSAGES) {
                     fragment.setTitle(getString(R.string.RemoveMessageFeeTitle));
                 }
+                final ArrayList<Long> originalSelection = new ArrayList<>(createFromArray);
+                createFromArray = filterHiddenPrivacyDialogs(createFromArray);
                 fragment.select(createFromArray, position == alwaysShareRow && currentPlusPremium[currentType == TYPE_CONTACTS ? 0 : 1], allowMiniapps && currentPlusMiniapps[currentType]);
                 fragment.setDelegate((premium, miniapps, ids) -> {
                     if (position == neverShareRow) {
-                        currentMinus = ids;
+                        currentMinus = preserveHiddenPrivacyDialogs(originalSelection, ids);
                         currentPlusMiniapps[currentType] = allowMiniapps && miniapps;
                         for (int a = 0; a < currentMinus.size(); a++) {
                             currentPlus.remove(currentMinus.get(a));
@@ -765,7 +769,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     } else {
                         currentPlusPremium[currentType == TYPE_CONTACTS ? 0 : 1] = premium;
                         currentPlusMiniapps[currentType] = allowMiniapps && miniapps;
-                        currentPlus = ids;
+                        currentPlus = preserveHiddenPrivacyDialogs(originalSelection, ids);
                         for (int a = 0; a < currentPlus.size(); a++) {
                             currentMinus.remove(currentPlus.get(a));
                         }
@@ -918,6 +922,54 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 messageCell.invalidate();
             }
         }
+    }
+
+    private boolean isHiddenPrivacyDialog(long dialogId) {
+        if (!DialogObject.isUserDialog(dialogId)) {
+            return false;
+        }
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+        return vault != null && vault.isDialogHiddenForFiltering(dialogId);
+    }
+
+    private ArrayList<Long> filterHiddenPrivacyDialogs(ArrayList<Long> ids) {
+        ArrayList<Long> visible = new ArrayList<>();
+        if (ids == null) {
+            return visible;
+        }
+        for (Long id : ids) {
+            if (id != null && !isHiddenPrivacyDialog(id)) {
+                visible.add(id);
+            }
+        }
+        return visible;
+    }
+
+    private ArrayList<Long> preserveHiddenPrivacyDialogs(ArrayList<Long> original, ArrayList<Long> selected) {
+        ArrayList<Long> result = selected == null ? new ArrayList<>() : new ArrayList<>(selected);
+        if (original != null) {
+            for (Long id : original) {
+                if (id != null && isHiddenPrivacyDialog(id) && !result.contains(id)) {
+                    result.add(id);
+                }
+            }
+        }
+        return result;
+    }
+
+    private void prepareHiddenPrivacyFilterCache() {
+        HiddenChatsVault vault = HiddenChatsVault.getActiveVault(currentAccount);
+        if (vault == null) {
+            return;
+        }
+        ArrayList<Long> ids = new ArrayList<>();
+        if (currentPlus != null) ids.addAll(currentPlus);
+        if (currentMinus != null) ids.addAll(currentMinus);
+        vault.prepareDialogFilterCache(ids, () -> {
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        });
     }
 
     private void updateDoneButton() {
@@ -1899,7 +1951,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
             for (int a = 0; a < arrayList.size(); a++) {
                 long id = arrayList.get(a);
                 if (id > 0) {
-                    count++;
+                    if (!isHiddenPrivacyDialog(id)) {
+                        count++;
+                    }
                 } else {
                     TLRPC.Chat chat = getMessagesController().getChat(-id);
                     if (chat != null) {
