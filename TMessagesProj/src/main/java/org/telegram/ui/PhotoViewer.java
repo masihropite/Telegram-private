@@ -181,6 +181,7 @@ import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessageSuggestionParams;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.LocalProfilePhotoSettings;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
@@ -4221,14 +4222,24 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 this.dialogPhotos = dialogPhotos;
                 int setToImage = -1;
                 ArrayList<TLRPC.Photo> photos = new ArrayList<>(dialogPhotos.photos);
+                boolean hidePrivateProfilePhoto = false;
+                boolean hidePublicProfilePhoto = false;
                 if (avatarsDialogId > 0) {
                     TLRPC.UserFull fullUser = MessagesController.getInstance(currentAccount).getUserFull(avatarsDialogId);
                     TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(avatarsDialogId);
-                    if (fullUser != null && fullUser.personal_photo instanceof TLRPC.TL_photo) {
+                    if (user != null && user.self) {
+                        hidePrivateProfilePhoto = LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+                        hidePublicProfilePhoto = LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+                    }
+                    if (!hidePrivateProfilePhoto && fullUser != null && fullUser.personal_photo instanceof TLRPC.TL_photo) {
                         photos.add(0, fullUser.personal_photo);
                     }
-                    if (user != null && user.self && UserObject.hasFallbackPhoto(fullUser)) {
+                    if (!hidePublicProfilePhoto && user != null && user.self && UserObject.hasFallbackPhoto(fullUser)) {
                         photos.add(fullUser.fallback_photo);
+                    }
+                    if (user != null && user.self && hidePrivateProfilePhoto && hidePublicProfilePhoto) {
+                        closePhoto(false, false);
+                        return;
                     }
                 }
                 imagesArrLocations.clear();
