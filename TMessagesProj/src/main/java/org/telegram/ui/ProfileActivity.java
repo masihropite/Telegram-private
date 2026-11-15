@@ -801,7 +801,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (userId != 0) {
                 TLRPC.User user = getMessagesController().getUser(userId);
                 if (user != null && user.photo != null && user.photo.photo_big != null) {
-                    photoBig = user.photo.photo_big;
+                    boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                            && (user.photo.personal
+                            ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                            : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount));
+                    if (!hideCurrentPhoto) {
+                        photoBig = user.photo.photo_big;
+                    }
                 }
             } else if (chatId != 0) {
                 TLRPC.Chat chat = getMessagesController().getChat(chatId);
@@ -6987,22 +6993,36 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         TLRPC.Photo carouselPhoto = avatarsViewPager != null ? avatarsViewPager.getPhoto(carouselPosition) : null;
         if (userId != 0) {
             TLRPC.User user = getMessagesController().getUser(userId);
-            if (ImageLocation.isOwnProfilePhotoHidden(currentAccount, user)) {
-                ImageLocation visibleLocation = ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_BIG);
-                if (visibleLocation != null && visibleLocation.location != null) {
-                    PhotoViewer.getInstance().setParentActivity(ProfileActivity.this);
-                    ImageLocation visibleVideoLocation = ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_VIDEO_BIG);
-                    PhotoViewer.getInstance().openPhotoWithVideo(visibleLocation.location, visibleLocation, visibleVideoLocation, provider);
-                }
-                return;
-            }
-            if (user.photo != null && user.photo.photo_big != null) {
+            if (user != null && user.photo != null && user.photo.photo_big != null) {
+                boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                        && (user.photo.personal
+                        ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                        : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount));
+                boolean isCurrentPhoto = carouselPhoto == null || carouselPhoto.id == user.photo.photo_id;
                 PhotoViewer.getInstance().setParentActivity(ProfileActivity.this);
-                if (user.photo.dc_id != 0) {
-                    user.photo.photo_big.dc_id = user.photo.dc_id;
+                TLRPC.FileLocation fileLocation;
+                TLRPC.Photo photo;
+                if (hideCurrentPhoto && isCurrentPhoto) {
+                    TLRPC.Photo alternatePhoto = userInfo == null ? null
+                            : (user.photo.personal ? userInfo.fallback_photo : userInfo.personal_photo);
+                    if (alternatePhoto == null || alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
+                        return;
+                    }
+                    TLRPC.PhotoSize alternateSize = FileLoader.getClosestPhotoSizeWithSize(alternatePhoto.sizes, 1000);
+                    if (alternateSize == null || alternateSize.location == null) {
+                        return;
+                    }
+                    carouselImageLocation = ImageLocation.getForPhoto(alternateSize, alternatePhoto);
+                    fileLocation = alternateSize.location;
+                    photo = alternatePhoto;
+                } else {
+                    if (user.photo.dc_id != 0) {
+                        user.photo.photo_big.dc_id = user.photo.dc_id;
+                    }
+                    fileLocation = carouselImageLocation != null && carouselImageLocation.location != null
+                            ? carouselImageLocation.location : user.photo.photo_big;
+                    photo = carouselPhoto;
                 }
-                TLRPC.FileLocation fileLocation = carouselImageLocation != null && carouselImageLocation.location != null ? carouselImageLocation.location : user.photo.photo_big;
-                TLRPC.Photo photo = carouselPhoto;
                 if (photo == null && userInfo != null) {
                     if (user.photo.personal && userInfo.personal_photo instanceof TLRPC.TL_photo) {
                         photo = userInfo.personal_photo;
@@ -9592,7 +9612,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 searchAdapter.search(searchAdapter.lastSearchString);
             }
         } else if (id == NotificationCenter.reloadDialogPhotos) {
-            updateProfileData(false);
+            avatar = null;
+            avatarBig = null;
+            prevLoadedImageLocation = null;
+            updateProfileData(true);
         } else if (id == NotificationCenter.storiesUpdated || id == NotificationCenter.storiesReadUpdated) {
             if (avatarImage != null) {
                 avatarImage.setHasStories(needInsetForStories());
@@ -11569,34 +11592,30 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             setCollectibleGiftStatus(user.emoji_status instanceof TLRPC.TL_emojiStatusCollectible ? (TLRPC.TL_emojiStatusCollectible) user.emoji_status : null);
 
 
-            final boolean hideCurrentPhoto = ImageLocation.isOwnProfilePhotoHidden(currentAccount, user);
             final ImageLocation imageLocation = ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_BIG);
             final ImageLocation thumbLocation = ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_SMALL);
             final ImageLocation videoThumbLocation = ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_VIDEO_BIG);
             VectorAvatarThumbDrawable vectorAvatarThumbDrawable = null;
             TLRPC.VideoSize vectorAvatar = null;
             if (userInfo != null) {
-                TLRPC.Photo displayPhoto = hideCurrentPhoto
-                        ? ImageLocation.getOwnAlternateProfilePhoto(currentAccount, user)
-                        : (user.photo != null && user.photo.personal ? userInfo.personal_photo : userInfo.profile_photo);
-                vectorAvatar = displayPhoto == null ? null : FileLoader.getVectorMarkupVideoSize(displayPhoto);
+                boolean hideCurrentPhoto = user.id == getUserConfig().getClientUserId()
+                        && (user.photo != null && (user.photo.personal
+                        ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                        : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)));
+                vectorAvatar = hideCurrentPhoto ? null
+                        : FileLoader.getVectorMarkupVideoSize(user.photo != null && user.photo.personal ? userInfo.personal_photo : userInfo.profile_photo);
                 if (vectorAvatar != null) {
                     vectorAvatarThumbDrawable = new VectorAvatarThumbDrawable(vectorAvatar, user.premium, VectorAvatarThumbDrawable.TYPE_PROFILE);
                 }
             }
-            final ImageLocation videoLocation = hideCurrentPhoto
-                    ? ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_VIDEO_BIG)
-                    : avatarsViewPager.getCurrentVideoLocation(thumbLocation, imageLocation);
+            final ImageLocation videoLocation = avatarsViewPager.getCurrentVideoLocation(thumbLocation, imageLocation);
             if (avatar == null) {
                 avatarsViewPager.initIfEmpty(vectorAvatarThumbDrawable, imageLocation, thumbLocation, reload);
             }
-            // The current user's local public/private visibility switches can change while
-            // this profile screen remains open. Refresh the avatar from the selected
-            // visible photo instead of keeping the previously displayed (now hidden) one.
-            if (avatarBig == null || user.id == getUserConfig().getClientUserId()) {
+            if (avatarBig == null) {
                 if (vectorAvatar != null) {
                     avatarImage.setImageDrawable(vectorAvatarThumbDrawable);
-                } else if (videoThumbLocation != null && (hideCurrentPhoto || user.photo != null && !user.photo.personal)) {
+                } else if (videoThumbLocation != null && !user.photo.personal) {
                     avatarImage.getImageReceiver().setVideoThumbIsSame(true);
                     avatarImage.setImage(videoThumbLocation, "avatar", imageLocation, "50_50", thumbLocation, "50_50", avatarDrawable, user);
                 } else {
@@ -11617,8 +11636,6 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             String newString2;
             boolean hiddenStatusButton = false;
             if (user.id == getUserConfig().getClientUserId()) {
-                // The fallback belongs to the public profile photo; hiding the private
-                // photo must not make the public fallback disappear.
                 if (UserObject.hasFallbackPhoto(getUserInfo())
                         && !org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount)) {
                     newString2 = "";
@@ -11628,7 +11645,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         fallbackImage.setImage(ImageLocation.getForPhoto(smallSize, getUserInfo().fallback_photo), "50_50", (Drawable) null, 0, null, UserConfig.getInstance(currentAccount).getCurrentUser(), 0);
                     }
                 } else {
-                    fallbackImage.clearImage();
+                    fallbackImage.setImageDrawable(null);
                     if (userInfo != null && userInfo.stars_rating != null && userInfo.stars_rating.stars < 0) {
                         newString2 = getString(R.string.StarRatingLevelNegative).toLowerCase(Locale.ROOT);
                     } else {

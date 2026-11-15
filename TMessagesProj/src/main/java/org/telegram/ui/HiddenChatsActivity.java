@@ -37,8 +37,6 @@ public class HiddenChatsActivity extends BaseFragment {
     private HiddenChatsVault vault;
     private LinearLayout content;
     private LinearLayout rows;
-    private Button privatePhotoButton;
-    private Button publicPhotoButton;
     private boolean handedOffToHiddenList;
 
     public HiddenChatsActivity(int account) {
@@ -93,21 +91,15 @@ public class HiddenChatsActivity extends BaseFragment {
         });
         content.addView(showHidden, new LinearLayout.LayoutParams(-1, -2));
 
-        Button add = new Button(context);
-        add.setText("افزودن گفتگو");
-        add.setGravity(Gravity.CENTER);
-        add.setOnClickListener(v -> openChatPicker());
-        content.addView(add, new LinearLayout.LayoutParams(-1, -2));
+        Button privatePhoto = new Button(context);
+        updateProfilePhotoButton(privatePhoto, true);
+        privatePhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(true, privatePhoto));
+        content.addView(privatePhoto, new LinearLayout.LayoutParams(-1, -2));
 
-        privatePhotoButton = new Button(context);
-        updateProfilePhotoButton(privatePhotoButton, true);
-        privatePhotoButton.setOnClickListener(v -> toggleProfilePhotoVisibility(true));
-        content.addView(privatePhotoButton, new LinearLayout.LayoutParams(-1, -2));
-
-        publicPhotoButton = new Button(context);
-        updateProfilePhotoButton(publicPhotoButton, false);
-        publicPhotoButton.setOnClickListener(v -> toggleProfilePhotoVisibility(false));
-        content.addView(publicPhotoButton, new LinearLayout.LayoutParams(-1, -2));
+        Button publicPhoto = new Button(context);
+        updateProfilePhotoButton(publicPhoto, false);
+        publicPhoto.setOnClickListener(v -> toggleProfilePhotoVisibility(false, publicPhoto));
+        content.addView(publicPhoto, new LinearLayout.LayoutParams(-1, -2));
 
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
@@ -129,21 +121,24 @@ public class HiddenChatsActivity extends BaseFragment {
         button.setText((hidden ? "نمایش عکس " : "مخفی‌کردن عکس ") + kind);
     }
 
-    private void toggleProfilePhotoVisibility(boolean privatePhoto) {
+    private void toggleProfilePhotoVisibility(boolean privatePhoto, Button button) {
         boolean current = privatePhoto
                 ? org.telegram.messenger.LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
                 : org.telegram.messenger.LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
         boolean saved = org.telegram.messenger.LocalProfilePhotoSettings.setHidden(
                 ApplicationLoader.applicationContext, currentAccount, privatePhoto, !current);
         if (!saved) {
-            Toast.makeText(getParentActivity(), "ذخیره تنظیمات نمایش عکس انجام نشد.", Toast.LENGTH_LONG).show();
+            Toast.makeText(getParentActivity(),
+                    "برای مخفی‌کردن این عکس باید یک عکس جایگزین دیگر در پروفایل موجود و قابل نمایش باشد.",
+                    Toast.LENGTH_LONG).show();
             return;
         }
-        updateProfilePhotoButton(privatePhotoButton, true);
-        updateProfilePhotoButton(publicPhotoButton, false);
+        updateProfilePhotoButton(button, privatePhoto);
         org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
                 org.telegram.messenger.NotificationCenter.updateInterfaces,
                 org.telegram.messenger.MessagesController.UPDATE_MASK_AVATAR);
+        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(
+                org.telegram.messenger.NotificationCenter.reloadDialogPhotos);
     }
 
     private void requestPassword() {
@@ -166,6 +161,7 @@ public class HiddenChatsActivity extends BaseFragment {
                 if (vault.isConfigured()) {
                     vault.unlock(entered);
                     dialog.dismiss();
+                    org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                     refreshRows();
                 } else {
                     requestPasswordConfirmation(entered.clone());
@@ -200,6 +196,7 @@ public class HiddenChatsActivity extends BaseFragment {
                             return;
                         }
                         vault.create(first);
+                        org.telegram.messenger.NotificationCenter.getInstance(currentAccount).postNotificationName(org.telegram.messenger.NotificationCenter.dialogsNeedReload);
                         refreshRows();
                     } catch (Exception e) {
                         Toast.makeText(getParentActivity(), e.getMessage() == null ? "ساخت فضای گفتگوهای مخفی انجام نشد" : e.getMessage(), Toast.LENGTH_LONG).show();
@@ -217,9 +214,7 @@ public class HiddenChatsActivity extends BaseFragment {
         args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_DEFAULT);
         args.putBoolean("hiddenChatsMode", true);
         handedOffToHiddenList = true;
-        DialogsActivity hiddenDialogs = new DialogsActivity(args);
-        hiddenDialogs.setCurrentAccount(currentAccount);
-        presentFragment(hiddenDialogs);
+        presentFragment(new DialogsActivity(args));
     }
 
     private void refreshRows() {
@@ -240,12 +235,27 @@ public class HiddenChatsActivity extends BaseFragment {
             return;
         }
         if (ids.isEmpty()) {
+            rows.setGravity(Gravity.CENTER);
+            rows.setMinimumHeight(dp(getParentActivity(), 300));
             TextView empty = new TextView(getParentActivity());
             empty.setText("هنوز گفتگویی مخفی نشده است.");
+            empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(getParentActivity(), 20), 0, dp(getParentActivity(), 12));
-            rows.addView(empty);
+            rows.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+            Button add = new Button(getParentActivity());
+            add.setText("افزودن گفتگو");
+            add.setGravity(Gravity.CENTER);
+            add.setOnClickListener(v -> openChatPicker());
+            rows.addView(add, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
+        rows.setGravity(Gravity.TOP);
+        rows.setMinimumHeight(0);
+        Button addMore = new Button(getParentActivity());
+        addMore.setText("افزودن گفتگو");
+        addMore.setGravity(Gravity.CENTER);
+        addMore.setOnClickListener(v -> openChatPicker());
+        rows.addView(addMore, new LinearLayout.LayoutParams(-1, -2));
         for (Long id : ids) {
             final long dialogId = id;
             LinearLayout line = new LinearLayout(getParentActivity());

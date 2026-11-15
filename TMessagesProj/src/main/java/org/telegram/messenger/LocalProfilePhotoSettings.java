@@ -6,39 +6,19 @@ import android.content.SharedPreferences;
 import org.telegram.tgnet.TLRPC;
 
 /**
- * Device-local visibility switches for the signed-in account's private and
- * public profile photos. No Telegram profile data or privacy settings are
- * changed on the server.
- *
- * Preferences are keyed by the stable Telegram user id, not by the account
- * slot, so removing/reordering accounts cannot transfer settings to another user.
+ * Device-local visibility switches for the current account's public/private
+ * profile photos. These settings never modify Telegram server profile data.
  */
 public final class LocalProfilePhotoSettings {
     private static final String PREFS = "telegramz_local_profile_photo_visibility";
     private static final String HIDE_PUBLIC = "hide_public_photo";
     private static final String HIDE_PRIVATE = "hide_private_photo";
-    private static final String INITIALIZED = "user_id_preferences_initialized";
 
     private LocalProfilePhotoSettings() {
     }
 
     private static SharedPreferences getPreferences(Context context, int account) {
-        Context appContext = context.getApplicationContext();
-        long userId = UserConfig.getInstance(account).getClientUserId();
-        if (userId <= 0) {
-            return appContext.getSharedPreferences(PREFS + "_pending_" + account, Context.MODE_PRIVATE);
-        }
-
-        SharedPreferences preferences = appContext.getSharedPreferences(PREFS + "_" + userId, Context.MODE_PRIVATE);
-        if (!preferences.getBoolean(INITIALIZED, false)) {
-            SharedPreferences legacy = appContext.getSharedPreferences(PREFS + "_" + account, Context.MODE_PRIVATE);
-            preferences.edit()
-                    .putBoolean(HIDE_PUBLIC, legacy.getBoolean(HIDE_PUBLIC, false))
-                    .putBoolean(HIDE_PRIVATE, legacy.getBoolean(HIDE_PRIVATE, false))
-                    .putBoolean(INITIALIZED, true)
-                    .commit();
-        }
-        return preferences;
+        return context.getApplicationContext().getSharedPreferences(PREFS + "_" + account, Context.MODE_PRIVATE);
     }
 
     public static boolean isPublicHidden(Context context, int account) {
@@ -50,27 +30,22 @@ public final class LocalProfilePhotoSettings {
     }
 
     /**
-     * A hide request is accepted only when the opposite photo type exists and
-     * remains visible. This prevents a profile from losing every visible photo.
+     * Changes one local visibility switch. At least one of the two profile
+     * photo types must remain visible.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
         SharedPreferences preferences = getPreferences(context, account);
-        String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
-        if (hidden) {
-            boolean otherHidden = preferences.getBoolean(privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE, false);
-            if (otherHidden || !hasVisibleAlternative(context, account, !privatePhoto)) {
-                return false;
-            }
+        boolean otherHidden = preferences.getBoolean(privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE, false);
+        if (hidden && (otherHidden || !hasPhoto(context, account, !privatePhoto))) {
+            return false;
         }
+        String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
         return preferences.edit().putBoolean(key, hidden).commit();
     }
 
-    private static boolean hasVisibleAlternative(Context context, int account, boolean privatePhoto) {
-        TLRPC.User user = MessagesController.getInstance(account)
-                .getUser(UserConfig.getInstance(account).getClientUserId());
-        if (user == null) {
-            return false;
-        }
+    private static boolean hasPhoto(Context context, int account, boolean privatePhoto) {
+        TLRPC.User user = MessagesController.getInstance(account).getUser(UserConfig.getInstance(account).getClientUserId());
+        if (user == null) return false;
         TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
         if (privatePhoto) {
             boolean currentPersonal = user.photo != null && user.photo.personal && user.photo.photo_big != null;

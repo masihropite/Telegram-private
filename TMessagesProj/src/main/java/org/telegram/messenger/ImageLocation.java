@@ -164,86 +164,24 @@ public class ImageLocation {
         return getForUser(UserConfig.selectedAccount, user, type);
     }
 
-    private static int getOwningAccountForProfileUser(int preferredAccount, TLRPC.User user) {
-        if (user == null) {
-            return -1;
-        }
-        if (UserConfig.getInstance(preferredAccount).getClientUserId() == user.id) {
-            return preferredAccount;
-        }
-        // Account switcher rows can render another signed-in account while
-        // the currently selected account is different. Resolve settings by
-        // the actual owner of this user id, not by the active account slot.
-        for (int account = 0; account < UserConfig.MAX_ACCOUNT_COUNT; account++) {
-            if (account != preferredAccount && UserConfig.getInstance(account).getClientUserId() == user.id) {
-                return account;
-            }
-        }
-        return -1;
-    }
-
-    public static boolean isOwnProfilePhotoHidden(int currentAccount, TLRPC.User user) {
-        // The private profile photo is the account's main user.photo. The
-        // public fallback_photo is handled separately and must not cause the
-        // private photo to disappear when only the public switch is enabled.
-        int ownerAccount = getOwningAccountForProfileUser(currentAccount, user);
-        return ownerAccount >= 0 && LocalProfilePhotoSettings.isPrivateHidden(
-                ApplicationLoader.applicationContext, ownerAccount);
-    }
-
-    public static TLRPC.Photo getOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user) {
-        int ownerAccount = getOwningAccountForProfileUser(currentAccount, user);
-        if (ownerAccount < 0 || !isOwnProfilePhotoHidden(ownerAccount, user)
-                || LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, ownerAccount)) {
+    private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type, boolean hiddenPhotoIsPrivate) {
+        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             return null;
         }
-        TLRPC.UserFull userFull = MessagesController.getInstance(ownerAccount).getUserFull(user.id);
+        TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
         if (userFull == null) {
             return null;
         }
-
-        // When the private photo is hidden, only the public fallback photo is
-        // an allowed replacement. Never substitute profile_photo/personal_photo
-        // because those represent the private side of this profile.
-        TLRPC.Photo publicPhoto = userFull.fallback_photo;
-        return publicPhoto != null && (user.photo == null || publicPhoto.id != user.photo.photo_id)
-                ? publicPhoto : null;
-    }
-
-    private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type) {
-        TLRPC.Photo alternatePhoto = getOwnAlternateProfilePhoto(currentAccount, user);
-        if (alternatePhoto == null) {
+        TLRPC.Photo alternatePhoto = hiddenPhotoIsPrivate ? userFull.fallback_photo : userFull.personal_photo;
+        if (alternatePhoto == null || alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
             return null;
         }
-        if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
-            if (alternatePhoto.video_sizes == null || alternatePhoto.video_sizes.isEmpty()) {
-                return null;
-            }
-            int targetSize = type == TYPE_VIDEO_BIG ? 1000 : 100;
-            TLRPC.VideoSize videoSize = FileLoader.getClosestVideoSizeWithSize(alternatePhoto.video_sizes, targetSize);
-            if (type == TYPE_VIDEO_SMALL) {
-                for (int i = 0; i < alternatePhoto.video_sizes.size(); i++) {
-                    if ("p".equals(alternatePhoto.video_sizes.get(i).type)) {
-                        videoSize = alternatePhoto.video_sizes.get(i);
-                        break;
-                    }
-                }
-            }
-            return videoSize == null ? null : ImageLocation.getForPhoto(videoSize, alternatePhoto);
-        }
         if (type == TYPE_STRIPPED) {
-            if (alternatePhoto.sizes == null) {
-                return null;
-            }
-            for (int i = 0; i < alternatePhoto.sizes.size(); i++) {
-                TLRPC.PhotoSize size = alternatePhoto.sizes.get(i);
+            for (TLRPC.PhotoSize size : alternatePhoto.sizes) {
                 if (size instanceof TLRPC.TL_photoStrippedSize) {
                     return ImageLocation.getForPhoto(size, alternatePhoto);
                 }
             }
-            return null;
-        }
-        if (alternatePhoto.sizes == null || alternatePhoto.sizes.isEmpty()) {
             return null;
         }
         int targetSize = type == TYPE_BIG ? 1000 : 100;
@@ -252,16 +190,16 @@ public class ImageLocation {
     }
 
     public static ImageLocation getForUser(int currentAccount, TLRPC.User user, int type) {
-        if (user == null) {
+        if (user == null || user.photo == null) {
             return null;
         }
-        if (isOwnProfilePhotoHidden(currentAccount, user)) {
-            // Never fall back to the hidden photo when the alternate is not
-            // loaded yet. A placeholder is safer than exposing a hidden image.
-            return getForOwnAlternateProfilePhoto(currentAccount, user, type);
-        }
-        if (user.photo == null) {
-            return null;
+        if (user.id == UserConfig.getInstance(currentAccount).getClientUserId()) {
+            boolean hidePhoto = user.photo.personal
+                    ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                    : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+            if (hidePhoto) {
+                return getForOwnAlternateProfilePhoto(currentAccount, user, type, user.photo.personal);
+            }
         }
         if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             if (MessagesController.getInstance(currentAccount).isPremiumUser(user) && user.photo.has_video) {

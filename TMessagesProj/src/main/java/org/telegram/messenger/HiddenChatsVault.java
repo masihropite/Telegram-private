@@ -65,15 +65,8 @@ public final class HiddenChatsVault {
     private static final int MAX_DIALOGS = 100000;
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final ConcurrentHashMap<Integer, SecretKey> CACHED_FILTER_KEYS = new ConcurrentHashMap<Integer, SecretKey>();
-    private static final ThreadLocal<ConcurrentHashMap<Integer, Mac>> FILTER_MACS =
-            new ThreadLocal<ConcurrentHashMap<Integer, Mac>>() {
-                @Override
-                protected ConcurrentHashMap<Integer, Mac> initialValue() {
-                    return new ConcurrentHashMap<Integer, Mac>();
-                }
-            };
-    private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
+    private static volatile SecretKey cachedFilterKey;
+    private static volatile HiddenChatsVault activeVault;
     private static final Object FILTER_CACHE_LOCK = new Object();
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
     private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
@@ -102,15 +95,15 @@ public final class HiddenChatsVault {
     }
 
     public void registerAsActiveVault() {
-        ACTIVE_VAULTS.put(account, this);
+        activeVault = this;
     }
 
-    public static HiddenChatsVault getActiveVault(int account) {
-        return ACTIVE_VAULTS.get(account);
+    public static HiddenChatsVault getActiveVault() {
+        return activeVault;
     }
 
-    public static void lockActiveVault(int account) {
-        HiddenChatsVault current = ACTIVE_VAULTS.get(account);
+    public static void lockActiveVault() {
+        HiddenChatsVault current = activeVault;
         if (current != null) {
             current.lock();
         }
@@ -175,6 +168,7 @@ public final class HiddenChatsVault {
         buffer.get(ciphertext);
 
         byte[] candidateKey = deriveKey(password, storedSalt);
+        boolean needsFilterIndexMigration = false;
         try {
             byte[] plaintext = crypt(Cipher.DECRYPT_MODE, candidateKey, iv, ciphertext);
             Set<Long> restored = deserializeDialogIds(plaintext);
@@ -184,12 +178,24 @@ public final class HiddenChatsVault {
             salt = storedSalt;
             hiddenDialogIds.clear();
             hiddenDialogIds.addAll(restored);
+            try {
+                needsFilterIndexMigration = preferences.getStringSet(KEY_FILTER_TOKENS, null) == null;
+            } catch (Exception e) {
+                needsFilterIndexMigration = true;
+            }
         } catch (GeneralSecurityException e) {
             clear(candidateKey);
             throw new GeneralSecurityException("Incorrect password or damaged hidden chats data", e);
         } catch (RuntimeException e) {
             clear(candidateKey);
             throw new GeneralSecurityException("Hidden chats data is invalid", e);
+        }
+        if (needsFilterIndexMigration) {
+            try {
+                persist();
+            } catch (GeneralSecurityException e) {
+                FileLog.e(e);
+            }
         }
     }
 
@@ -255,12 +261,6 @@ public final class HiddenChatsVault {
                 }
             }
         }
-        if (missingKeys.isEmpty()) {
-            if (onReady != null) {
-                AndroidUtilities.runOnUIThread(onReady);
-            }
-            return;
-        }
         if (pendingIds.isEmpty()) {
             return;
         }
@@ -276,44 +276,37 @@ public final class HiddenChatsVault {
             try {
                 Set<String> tokens;
                 try {
-                    Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
-                    tokens = storedTokens == null
-                            ? Collections.<String>emptySet()
-                            : new LinkedHashSet<String>(storedTokens);
+                    boolean configured = preferences.contains(KEY_PAYLOAD);
+                    boolean hasFilterTokens = preferences.contains(KEY_FILTER_TOKENS);
+                    if (configured && !hasFilterTokens) {
+                        // Older or damaged vault data must fail closed until it is unlocked and migrated.
+                        tokens = null;
+                    } else {
+                        Set<String> storedTokens = preferences.getStringSet(KEY_FILTER_TOKENS, Collections.<String>emptySet());
+                        tokens = storedTokens == null
+                                ? Collections.<String>emptySet()
+                                : new LinkedHashSet<String>(storedTokens);
+                    }
                 } catch (Exception e) {
                     tokens = null;
                 }
-                if (tokens != null && tokens.isEmpty()) {
-                    // No hidden chats: populate the visible cache without
-                    // invoking Android Keystore once per dialog on startup.
-                    synchronized (FILTER_CACHE_LOCK) {
-                        if (expectedGeneration.get() == generation) {
-                            for (Long id : pendingIds) {
-                                FILTER_CACHE.put(filterCacheKey(id.longValue()), false);
-                            }
+                for (Long id : pendingIds) {
+                    boolean hidden = tokens == null;
+                    if (tokens != null && tokens.isEmpty()) {
+                        // No hidden dialogs means no Keystore/HMAC work is needed.
+                        hidden = false;
+                    } else if (tokens != null) {
+                        try {
+                            String token = dialogToken(id.longValue());
+                            FILTER_TOKEN_CACHE.put(filterCacheKey(id.longValue()), token);
+                            hidden = tokens.contains(token);
+                        } catch (Exception e) {
+                            hidden = true;
                         }
                     }
-                } else {
-                    for (Long id : pendingIds) {
-                        if (expectedGeneration.get() != generation) break;
-                        boolean hidden = tokens == null;
-                        if (tokens != null) {
-                            try {
-                                String cacheKey = filterCacheKey(id.longValue());
-                                String token = FILTER_TOKEN_CACHE.get(cacheKey);
-                                if (token == null) {
-                                    token = dialogToken(id.longValue());
-                                    FILTER_TOKEN_CACHE.put(cacheKey, token);
-                                }
-                                hidden = tokens.contains(token);
-                            } catch (Exception e) {
-                                hidden = true;
-                            }
-                        }
-                        synchronized (FILTER_CACHE_LOCK) {
-                            if (expectedGeneration.get() == generation) {
-                                FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
-                            }
+                    synchronized (FILTER_CACHE_LOCK) {
+                        if (expectedGeneration.get() == generation) {
+                            FILTER_CACHE.put(filterCacheKey(id.longValue()), hidden);
                         }
                     }
                 }
@@ -347,44 +340,16 @@ public final class HiddenChatsVault {
         return account + ":" + dialogId;
     }
 
-    private void refreshFilterCache() {
-        ArrayList<Runnable> callbacks = new ArrayList<>();
+    private void invalidateFilterCache() {
         synchronized (FILTER_CACHE_LOCK) {
             AtomicInteger generation = FILTER_CACHE_GENERATIONS.get(account);
-            if (generation == null) {
-                AtomicInteger created = new AtomicInteger();
-                AtomicInteger existing = FILTER_CACHE_GENERATIONS.putIfAbsent(account, created);
-                generation = existing == null ? created : existing;
-            }
-            generation.incrementAndGet();
+            if (generation != null) generation.incrementAndGet();
             String prefix = account + ":";
-            for (String key : new ArrayList<>(FILTER_CACHE.keySet())) {
+            for (String key : FILTER_CACHE.keySet()) {
                 if (key.startsWith(prefix)) {
-                    try {
-                        long id = Long.parseLong(key.substring(prefix.length()));
-                        FILTER_CACHE.put(key, hiddenDialogIds.contains(id));
-                    } catch (NumberFormatException ignore) {
-                    }
+                    FILTER_CACHE.remove(key);
                 }
             }
-            for (String key : new ArrayList<>(FILTER_CACHE_PENDING)) {
-                if (key.startsWith(prefix)) {
-                    try {
-                        long id = Long.parseLong(key.substring(prefix.length()));
-                        FILTER_CACHE.put(key, hiddenDialogIds.contains(id));
-                    } catch (NumberFormatException ignore) {
-                    }
-                    FILTER_CACHE_PENDING.remove(key);
-                    CopyOnWriteArrayList<Runnable> waiters = FILTER_CACHE_WAITERS.remove(key);
-                    if (waiters != null) callbacks.addAll(waiters);
-                }
-            }
-            for (Long id : hiddenDialogIds) {
-                FILTER_CACHE.put(filterCacheKey(id.longValue()), true);
-            }
-        }
-        for (Runnable callback : callbacks) {
-            callback.run();
         }
     }
 
@@ -465,40 +430,34 @@ public final class HiddenChatsVault {
         if (!saved) {
             throw new GeneralSecurityException("Could not save hidden chats data");
         }
-        refreshFilterCache();
+        invalidateFilterCache();
     }
 
     private String dialogToken(long dialogId) throws GeneralSecurityException {
         try {
-            SecretKey key = CACHED_FILTER_KEYS.get(account);
+            SecretKey key = cachedFilterKey;
             if (key == null) {
-                synchronized (CACHED_FILTER_KEYS) {
-                    key = CACHED_FILTER_KEYS.get(account);
+                synchronized (HiddenChatsVault.class) {
+                    key = cachedFilterKey;
                     if (key == null) {
-                        String accountAlias = KEYSTORE_ALIAS;
                         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
                         keyStore.load(null);
-                        if (keyStore.containsAlias(accountAlias)) {
-                            key = (SecretKey) keyStore.getKey(accountAlias, null);
+                        if (keyStore.containsAlias(KEYSTORE_ALIAS)) {
+                            key = (SecretKey) keyStore.getKey(KEYSTORE_ALIAS, null);
                         } else {
                             KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore");
-                            generator.init(new KeyGenParameterSpec.Builder(accountAlias,
+                            generator.init(new KeyGenParameterSpec.Builder(KEYSTORE_ALIAS,
                                     KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
                                     .setDigests(KeyProperties.DIGEST_SHA256)
                                     .build());
                             key = generator.generateKey();
                         }
-                        CACHED_FILTER_KEYS.put(account, key);
+                        cachedFilterKey = key;
                     }
                 }
             }
-            ConcurrentHashMap<Integer, Mac> threadMacs = FILTER_MACS.get();
-            Mac mac = threadMacs.get(account);
-            if (mac == null) {
-                mac = Mac.getInstance("HmacSHA256");
-                mac.init(key);
-                threadMacs.put(account, mac);
-            }
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(key);
             byte[] raw = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(dialogId).array();
             return Base64.encodeToString(mac.doFinal(raw), Base64.NO_WRAP);
         } catch (GeneralSecurityException e) {
