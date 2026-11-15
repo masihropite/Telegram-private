@@ -66,7 +66,7 @@ public final class HiddenChatsVault {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile SecretKey cachedFilterKey;
-    private static volatile HiddenChatsVault activeVault;
+    private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
     private static final Object FILTER_CACHE_LOCK = new Object();
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
     private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
@@ -95,15 +95,23 @@ public final class HiddenChatsVault {
     }
 
     public void registerAsActiveVault() {
-        activeVault = this;
+        ACTIVE_VAULTS.put(account, this);
     }
 
     public static HiddenChatsVault getActiveVault() {
-        return activeVault;
+        return getActiveVault(UserConfig.selectedAccount);
+    }
+
+    public static HiddenChatsVault getActiveVault(int account) {
+        return ACTIVE_VAULTS.get(account);
     }
 
     public static void lockActiveVault() {
-        HiddenChatsVault current = activeVault;
+        lockActiveVault(UserConfig.selectedAccount);
+    }
+
+    public static void lockActiveVault(int account) {
+        HiddenChatsVault current = ACTIVE_VAULTS.get(account);
         if (current != null) {
             current.lock();
         }

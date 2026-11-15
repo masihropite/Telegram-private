@@ -164,6 +164,28 @@ public class ImageLocation {
         return getForUser(UserConfig.selectedAccount, user, type);
     }
 
+    public static boolean isOwnProfilePhotoHidden(int currentAccount, TLRPC.User user) {
+        if (user == null || user.photo == null
+                || user.id != UserConfig.getInstance(currentAccount).getClientUserId()) {
+            return false;
+        }
+        return user.photo.personal
+                ? LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount)
+                : LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+    }
+
+    public static TLRPC.Photo getOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user) {
+        if (user == null || user.photo == null
+                || user.id != UserConfig.getInstance(currentAccount).getClientUserId()) {
+            return null;
+        }
+        TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(user.id);
+        if (userFull == null) {
+            return null;
+        }
+        return user.photo.personal ? userFull.fallback_photo : userFull.personal_photo;
+    }
+
     private static ImageLocation getForOwnAlternateProfilePhoto(int currentAccount, TLRPC.User user, int type, boolean hiddenPhotoIsPrivate) {
         if (type == TYPE_VIDEO_BIG || type == TYPE_VIDEO_SMALL) {
             return null;
