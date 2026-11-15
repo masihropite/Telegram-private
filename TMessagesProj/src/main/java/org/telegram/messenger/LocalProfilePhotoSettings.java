@@ -3,6 +3,8 @@ package org.telegram.messenger;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import org.telegram.tgnet.TLRPC;
+
 /**
  * Device-local visibility switches for the signed-in account's private and
  * public profile photos. No Telegram profile data or privacy settings are
@@ -24,8 +26,6 @@ public final class LocalProfilePhotoSettings {
         Context appContext = context.getApplicationContext();
         long userId = UserConfig.getInstance(account).getClientUserId();
         if (userId <= 0) {
-            // Before account data is available, retain slot-scoped access only
-            // as a temporary fallback. Once the user id is known, migrate below.
             return appContext.getSharedPreferences(PREFS + "_pending_" + account, Context.MODE_PRIVATE);
         }
 
@@ -50,13 +50,37 @@ public final class LocalProfilePhotoSettings {
     }
 
     /**
-     * Changes only the requested local visibility switch. The private and
-     * public switches are independent and may both be enabled; in that case
-     * ImageLocation returns no profile photo and the UI displays its avatar.
+     * A hide request is accepted only when the opposite photo type exists and
+     * remains visible. This prevents a profile from losing every visible photo.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
         SharedPreferences preferences = getPreferences(context, account);
         String key = privatePhoto ? HIDE_PRIVATE : HIDE_PUBLIC;
+        if (hidden) {
+            boolean otherHidden = preferences.getBoolean(privatePhoto ? HIDE_PUBLIC : HIDE_PRIVATE, false);
+            if (otherHidden || !hasVisibleAlternative(context, account, !privatePhoto)) {
+                return false;
+            }
+        }
         return preferences.edit().putBoolean(key, hidden).commit();
+    }
+
+    private static boolean hasVisibleAlternative(Context context, int account, boolean privatePhoto) {
+        TLRPC.User user = MessagesController.getInstance(account)
+                .getUser(UserConfig.getInstance(account).getClientUserId());
+        if (user == null) {
+            return false;
+        }
+        TLRPC.UserFull full = MessagesController.getInstance(account).getUserFull(user.id);
+        if (privatePhoto) {
+            boolean currentPersonal = user.photo != null && user.photo.personal && user.photo.photo_big != null;
+            boolean alternatePersonal = full != null && full.personal_photo != null
+                    && full.personal_photo.sizes != null && !full.personal_photo.sizes.isEmpty();
+            return currentPersonal || alternatePersonal;
+        }
+        boolean currentPublic = user.photo != null && !user.photo.personal && user.photo.photo_big != null;
+        boolean fallbackPublic = full != null && UserObject.hasFallbackPhoto(full)
+                && full.fallback_photo.sizes != null && !full.fallback_photo.sizes.isEmpty();
+        return currentPublic || fallbackPublic;
     }
 }
