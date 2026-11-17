@@ -53,6 +53,8 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsVault;
+import org.telegram.messenger.LocalProfilePhotoSettings;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
@@ -614,6 +616,10 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
         }
         listView.setAdapter(listAdapter);
         listView.setOnItemClickListener((view, position) -> {
+            if (isPhotoPrivacyDisplayMasked() && (position == everybodyRow || position == myContactsRow || position == nobodyRow || position == alwaysShareRow || position == neverShareRow)) {
+                android.widget.Toast.makeText(getContext(), "تا زمانی که مخفی‌سازی عکس خصوصی روشن است، این بخش قابل تغییر نیست.", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
             if (position == currentPhotoForRestRow) {
                 AlertDialog alertDialog = AlertsCreator.createSimpleAlert(getContext(),
                         LocaleController.getString(R.string.RemovePublicPhoto),
@@ -728,10 +734,13 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     return;
                 }
                 ArrayList<Long> createFromArray;
+                final ArrayList<Long> hiddenKept;
                 if (position == neverShareRow) {
-                    createFromArray = currentMinus;
+                    createFromArray = visibleIdsIn(currentMinus);
+                    hiddenKept = hiddenIdsIn(currentMinus);
                 } else {
-                    createFromArray = currentPlus;
+                    createFromArray = visibleIdsIn(currentPlus);
+                    hiddenKept = hiddenIdsIn(currentPlus);
                 }
                 Bundle args = new Bundle();
                 args.putBoolean(position == neverShareRow ? "isNeverShare" : "isAlwaysShare", true);
@@ -756,8 +765,15 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 }
                 fragment.select(createFromArray, position == alwaysShareRow && currentPlusPremium[currentType == TYPE_CONTACTS ? 0 : 1], allowMiniapps && currentPlusMiniapps[currentType]);
                 fragment.setDelegate((premium, miniapps, ids) -> {
+                    // Contacts whose chat is hidden are not shown in the picker; keep them in the real rule.
+                    final ArrayList<Long> resultIds = new ArrayList<>(ids);
+                    for (int h = 0; h < hiddenKept.size(); h++) {
+                        if (!resultIds.contains(hiddenKept.get(h))) {
+                            resultIds.add(hiddenKept.get(h));
+                        }
+                    }
                     if (position == neverShareRow) {
-                        currentMinus = ids;
+                        currentMinus = resultIds;
                         currentPlusMiniapps[currentType] = allowMiniapps && miniapps;
                         for (int a = 0; a < currentMinus.size(); a++) {
                             currentPlus.remove(currentMinus.get(a));
@@ -765,7 +781,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     } else {
                         currentPlusPremium[currentType == TYPE_CONTACTS ? 0 : 1] = premium;
                         currentPlusMiniapps[currentType] = allowMiniapps && miniapps;
-                        currentPlus = ids;
+                        currentPlus = resultIds;
                         for (int a = 0; a < currentPlus.size(); a++) {
                             currentMinus.remove(currentPlus.get(a));
                         }
@@ -1372,6 +1388,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
         initialRulesType = currentType;
         initialPlus.addAll(currentPlus);
         initialMinus.addAll(currentMinus);
+        prepareHiddenFilterCache();
 
         if (rulesType == PRIVACY_RULES_TYPE_PHONE) {
             privacyRules = ContactsController.getInstance(currentAccount).getPrivacyRules(PRIVACY_RULES_TYPE_ADDED_BY_PHONE);
@@ -1419,6 +1436,75 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
         }
         updateRows(false);
         AndroidUtilities.updateVisibleRows(listView);
+    }
+
+    private HiddenChatsVault hiddenVault;
+
+    private HiddenChatsVault getHiddenVault() {
+        if (hiddenVault == null) {
+            hiddenVault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
+        }
+        return hiddenVault;
+    }
+
+    /** Ids of the real rule list whose chat is hidden locally (fail-closed until the cache is ready). */
+    private ArrayList<Long> hiddenIdsIn(ArrayList<Long> list) {
+        ArrayList<Long> result = new ArrayList<>();
+        if (list == null) {
+            return result;
+        }
+        HiddenChatsVault vault = getHiddenVault();
+        for (int a = 0; a < list.size(); a++) {
+            Long id = list.get(a);
+            if (id != null && vault.isDialogHiddenForFiltering(id)) {
+                result.add(id);
+            }
+        }
+        return result;
+    }
+
+    /** Ids of the real rule list that may be displayed (display only; the real list is never changed here). */
+    private ArrayList<Long> visibleIdsIn(ArrayList<Long> list) {
+        ArrayList<Long> result = new ArrayList<>();
+        if (list == null) {
+            return result;
+        }
+        HiddenChatsVault vault = getHiddenVault();
+        for (int a = 0; a < list.size(); a++) {
+            Long id = list.get(a);
+            if (id != null && !vault.isDialogHiddenForFiltering(id)) {
+                result.add(id);
+            }
+        }
+        return result;
+    }
+
+    private void prepareHiddenFilterCache() {
+        ArrayList<Long> all = new ArrayList<>();
+        if (currentPlus != null) {
+            all.addAll(currentPlus);
+        }
+        if (currentMinus != null) {
+            all.addAll(currentMinus);
+        }
+        if (all.isEmpty()) {
+            return;
+        }
+        getHiddenVault().prepareDialogFilterCache(all, () -> {
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        });
+    }
+
+    /** True when the "Profile Photos" screen must only look like "Everybody" (local display, nothing is sent). */
+    private boolean isPhotoPrivacyDisplayMasked() {
+        return rulesType == PRIVACY_RULES_TYPE_PHOTO
+                && LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+    }
+
+    private int getDisplayType() {
+        return isPhotoPrivacyDisplayMasked() ? TYPE_EVERYBODY : currentType;
     }
 
     private boolean hasChanges() {
@@ -1639,7 +1725,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                         } else {
                             checkedType = TYPE_PAY;
                         }
-                        radioCell.setChecked(currentType == checkedType, true);
+                        radioCell.setChecked(getDisplayType() == checkedType, true);
                     } else {
                         int checkedType;
                         if (position == phoneContactsRow) {
@@ -1918,8 +2004,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     ThemeBind.textColor(textCell.getTextView(), Theme.key_windowBackgroundWhiteBlackText, PrivacyControlActivity.this.getResourceProvider());
                     if (position == alwaysShareRow) {
                         String value;
-                        if (currentPlus.size() != 0) {
-                            value = LocaleController.formatPluralString("Users", getUsersCount(currentPlus));
+                        ArrayList<Long> shownPlus = isPhotoPrivacyDisplayMasked() ? new ArrayList<Long>() : visibleIdsIn(currentPlus);
+                        if (shownPlus.size() != 0) {
+                            value = LocaleController.formatPluralString("Users", getUsersCount(shownPlus));
                         } else {
                             value = LocaleController.getString(R.string.EmpryUsersPlaceholder);
                         }
@@ -1952,8 +2039,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     } else if (position == neverShareRow) {
                         String value;
                         int count = 0;
-                        if (currentMinus.size() != 0) {
-                            value = LocaleController.formatPluralString("Users", getUsersCount(currentMinus));
+                        ArrayList<Long> shownMinus = isPhotoPrivacyDisplayMasked() ? new ArrayList<Long>() : visibleIdsIn(currentMinus);
+                        if (shownMinus.size() != 0) {
+                            value = LocaleController.formatPluralString("Users", getUsersCount(shownMinus));
                         } else {
                             value = LocaleController.getString(R.string.EmpryUsersPlaceholder);
                         }
@@ -2202,34 +2290,34 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     if (position == everybodyRow || position == myContactsRow || position == nobodyRow || position == payRow) {
                         if (position == everybodyRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
-                                radioCell.setText(LocaleController.getString(R.string.P2PEverybody), currentType == TYPE_EVERYBODY, true);
+                                radioCell.setText(LocaleController.getString(R.string.P2PEverybody), getDisplayType() == TYPE_EVERYBODY, true);
                             } else {
-                                radioCell.setText(LocaleController.getString(R.string.LastSeenEverybody), currentType == TYPE_EVERYBODY, true);
+                                radioCell.setText(LocaleController.getString(R.string.LastSeenEverybody), getDisplayType() == TYPE_EVERYBODY, true);
                             }
                         } else if (position == myContactsRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_VOICE_MESSAGES && !getUserConfig().isPremium() || rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getMessagesController().newNoncontactPeersRequirePremiumWithoutOwnpremium && !getUserConfig().isPremium()) {
                                 radioCell.setRadioIcon(getContext().getResources().getDrawable(R.drawable.mini_switch_lock).mutate());
                             }
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
-                                radioCell.setText(LocaleController.getString(R.string.P2PContacts), currentType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
+                                radioCell.setText(LocaleController.getString(R.string.P2PContacts), getDisplayType() == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
                             } else if (rulesType == PRIVACY_RULES_TYPE_MESSAGES) {
-                                radioCell.setText(LocaleController.getString(R.string.PrivacyMessagesContactsAndPremium), currentType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
+                                radioCell.setText(LocaleController.getString(R.string.PrivacyMessagesContactsAndPremium), getDisplayType() == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
                             } else {
-                                radioCell.setText(LocaleController.getString(R.string.LastSeenContacts), currentType == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
+                                radioCell.setText(LocaleController.getString(R.string.LastSeenContacts), getDisplayType() == TYPE_CONTACTS, nobodyRow != -1 || payRow != -1);
                             }
                         } else if (position == payRow) {
                             if (rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getUserConfig().isPremium()/* || rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getMessagesController().newNoncontactPeersRequirePremiumWithoutOwnpremium && !getUserConfig().isPremium()*/) {
                                 radioCell.setRadioIcon(getContext().getResources().getDrawable(R.drawable.mini_switch_lock).mutate());
                             }
-                            radioCell.setText(getString(R.string.PrivateMessagesChargePrice), currentType == TYPE_PAY, false);
+                            radioCell.setText(getString(R.string.PrivateMessagesChargePrice), getDisplayType() == TYPE_PAY, false);
                         } else {
                             if (rulesType == PRIVACY_RULES_TYPE_VOICE_MESSAGES && !getUserConfig().isPremium() || rulesType == PRIVACY_RULES_TYPE_MESSAGES && !getMessagesController().newNoncontactPeersRequirePremiumWithoutOwnpremium && !getUserConfig().isPremium()) {
                                 radioCell.setRadioIcon(getContext().getResources().getDrawable(R.drawable.mini_switch_lock).mutate());
                             }
                             if (rulesType == PRIVACY_RULES_TYPE_P2P) {
-                                radioCell.setText(LocaleController.getString(R.string.P2PNobody), currentType == TYPE_NOBODY, false);
+                                radioCell.setText(LocaleController.getString(R.string.P2PNobody), getDisplayType() == TYPE_NOBODY, false);
                             } else {
-                                radioCell.setText(LocaleController.getString(R.string.LastSeenNobody), currentType == TYPE_NOBODY, false);
+                                radioCell.setText(LocaleController.getString(R.string.LastSeenNobody), getDisplayType() == TYPE_NOBODY, false);
                             }
                         }
                     } else {

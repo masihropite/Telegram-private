@@ -50,9 +50,8 @@ public final class LocalProfilePhotoSettings {
     }
 
     /**
-     * Changes only the requested local visibility switch. The private and
-     * public switches are independent and may both be enabled; in that case
-     * ImageLocation returns no profile photo and the UI displays its avatar.
+     * Changes only the requested local visibility switch. The two switches are
+     * independent; when both are enabled the default letter avatar is shown.
      */
     public static synchronized boolean setHidden(Context context, int account, boolean privatePhoto, boolean hidden) {
         SharedPreferences preferences = getPreferences(context, account);

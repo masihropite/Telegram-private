@@ -201,16 +201,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
     private NotificationCenter.ObserversGroup observersGroup;
     private NotificationCenter.ObserversGroup accountObserversGroup;
+    private final java.util.ArrayList<NotificationCenter.ObserversGroup> otherAccountObserversGroups = new java.util.ArrayList<>();
 
     @Override
     public boolean onFragmentCreate() {
         if (observersGroup != null) {
             observersGroup.removeAllObservers();
             observersGroup = null;
-        }
-        if (accountObserversGroup != null) {
-            accountObserversGroup.removeAllObservers();
-            accountObserversGroup = null;
         }
 
         observersGroup = NotificationCenter.getGlobalInstance()
@@ -219,9 +216,30 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             .add(NotificationCenter.starBalanceUpdated)
             .add(NotificationCenter.newSuggestionsAvailable);
 
+        // Per-account notifications (local avatar visibility switches post on the account instance).
+        if (accountObserversGroup != null) {
+            accountObserversGroup.removeAllObservers();
+            accountObserversGroup = null;
+        }
         accountObserversGroup = NotificationCenter.getInstance(currentAccount)
             .createObserversGroup(this)
-            .add(NotificationCenter.mainUserInfoChanged);
+            .add(NotificationCenter.updateInterfaces)
+            .add(NotificationCenter.mainUserInfoChanged)
+            .add(NotificationCenter.userInfoDidLoad);
+
+        // Other signed-in accounts appear in the "Accounts" list; refresh their avatars
+        // when their full user (public photo) finishes loading.
+        for (NotificationCenter.ObserversGroup group : otherAccountObserversGroups) {
+            group.removeAllObservers();
+        }
+        otherAccountObserversGroups.clear();
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (a != currentAccount && UserConfig.getInstance(a).isClientActivated()) {
+                otherAccountObserversGroups.add(NotificationCenter.getInstance(a)
+                    .createObserversGroup(this)
+                    .add(NotificationCenter.userInfoDidLoad));
+            }
+        }
 
         if (arguments != null) {
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
@@ -512,19 +530,31 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             accountObserversGroup.removeAllObservers();
             accountObserversGroup = null;
         }
+        for (NotificationCenter.ObserversGroup group : otherAccountObserversGroups) {
+            group.removeAllObservers();
+        }
+        otherAccountObserversGroups.clear();
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.mainUserInfoChanged && account == currentAccount) {
-            setInfo();
-        } else if (id == NotificationCenter.starBalanceUpdated) {
+        if (id == NotificationCenter.starBalanceUpdated) {
             setInfo();
             if (listView != null) {
                 listView.adapter.update(true);
             }
         } else if (id == NotificationCenter.updateInterfaces) {
             setInfo();
+        } else if (id == NotificationCenter.mainUserInfoChanged) {
+            setInfo();
+        } else if (id == NotificationCenter.userInfoDidLoad) {
+            if (account != currentAccount) {
+                if (listView != null) {
+                    listView.adapter.update(true);
+                }
+            } else if (args != null && args.length > 0 && args[0] instanceof Long && (Long) args[0] == getUserConfig().getClientUserId()) {
+                setInfo();
+            }
         } else if (id == NotificationCenter.newSuggestionsAvailable) {
             if (listView != null) {
                 listView.adapter.update(true);

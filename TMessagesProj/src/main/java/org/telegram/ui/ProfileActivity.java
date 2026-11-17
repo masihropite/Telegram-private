@@ -135,6 +135,7 @@ import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.HiddenChatsVault;
 import org.telegram.messenger.AuthTokensHelper;
 import org.telegram.messenger.BillingController;
 import org.telegram.messenger.BirthdayController;
@@ -10534,7 +10535,46 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         return AndroidUtilities.calcBitmapColor(avatarImage.getImageReceiver().getBitmap());
     }
 
+    private HiddenChatsVault membersHiddenVault;
+
+    /**
+     * Removes contacts whose private chat is hidden locally from the member list that
+     * this screen (and the members tab) is built from. Only members that are definitely
+     * known to be hidden are removed; unknown ones are resolved asynchronously and the
+     * list is rebuilt afterwards. Must run before sortedUsers is (re)built.
+     */
+    private void removeHiddenChatParticipants() {
+        if (chatInfo == null || chatInfo.participants == null || chatInfo.participants.participants == null) {
+            return;
+        }
+        if (membersHiddenVault == null) {
+            membersHiddenVault = new HiddenChatsVault(ApplicationLoader.applicationContext, currentAccount);
+        }
+        final long selfId = getUserConfig().getClientUserId();
+        final ArrayList<TLRPC.ChatParticipant> list = chatInfo.participants.participants;
+        final ArrayList<Long> unknownIds = new ArrayList<>();
+        for (int a = list.size() - 1; a >= 0; a--) {
+            TLRPC.ChatParticipant participant = list.get(a);
+            if (participant == null || participant.user_id == 0 || participant.user_id == selfId) {
+                continue;
+            }
+            if (!membersHiddenVault.isDialogFilterCached(participant.user_id)) {
+                unknownIds.add(participant.user_id);
+            } else if (membersHiddenVault.isDialogHiddenForFiltering(participant.user_id)) {
+                list.remove(a);
+            }
+        }
+        if (!unknownIds.isEmpty()) {
+            membersHiddenVault.prepareDialogFilterCache(unknownIds, () -> {
+                if (!isFinished && chatInfo != null) {
+                    updateListAnimated(true);
+                }
+            });
+        }
+    }
+
     private void updateOnlineCount(boolean notify) {
+        removeHiddenChatParticipants();
         onlineCount = 0;
         int currentTime = getConnectionsManager().getCurrentTime();
         sortedUsers.clear();

@@ -1027,6 +1027,13 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             if (tabs != null && tabs[INDEX_PROFILE] != null) {
                 tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
             }
+        } else if (id == NotificationCenter.userInfoDidLoad) {
+            // The public (fallback) photo is only known once the full user is loaded.
+            if (args != null && args.length > 0 && args[0] instanceof Long
+                    && (Long) args[0] == getUserConfig().getClientUserId()
+                    && tabs != null && tabs[INDEX_PROFILE] != null) {
+                tabs[INDEX_PROFILE].updateUserAvatar(currentAccount);
+            }
         } else if (id == NotificationCenter.contactsPermissionBadgeCheck) {
             checkContactsTabBadge();
         }
@@ -1045,6 +1052,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             .add(NotificationCenter.updateInterfaces)
             .add(NotificationCenter.callTabsVisibleToggled)
             .add(NotificationCenter.mainUserInfoChanged)
+            .add(NotificationCenter.userInfoDidLoad)
             .add(NotificationCenter.contactsPermissionBadgeCheck)
             .addGlobal(NotificationCenter.appUpdateAvailable)
             .addGlobal(NotificationCenter.appUpdateLoading)

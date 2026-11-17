@@ -176,6 +176,7 @@ import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.LocalProfilePhotoSettings;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -4229,6 +4230,19 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     }
                     if (user != null && user.self && UserObject.hasFallbackPhoto(fullUser)) {
                         photos.add(fullUser.fallback_photo);
+                    }
+                    if (user != null && user.self) {
+                        // Local-only hiding of the signed-in user's own profile photos.
+                        boolean hidePrivatePhoto = LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, currentAccount);
+                        boolean hidePublicPhoto = LocalProfilePhotoSettings.isPublicHidden(ApplicationLoader.applicationContext, currentAccount);
+                        if (hidePrivatePhoto) {
+                            photos.clear();
+                            if (!hidePublicPhoto && UserObject.hasFallbackPhoto(fullUser)) {
+                                photos.add(fullUser.fallback_photo);
+                            }
+                        } else if (hidePublicPhoto && fullUser != null && fullUser.fallback_photo != null) {
+                            photos.remove(fullUser.fallback_photo);
+                        }
                     }
                 }
                 imagesArrLocations.clear();
