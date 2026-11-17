@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - feature/local-hidden-chats
+      - build-64-base-build49
 
 permissions:
   contents: write
@@ -18,6 +19,38 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Apply programmer ZIP fixes and commit them
+        run: |
+          set -euo pipefail
+          ZIP_PATH="telegramz-6-files.zip"
+          test -s "$ZIP_PATH"
+          mkdir -p /tmp/telegramz-fixes
+          unzip -oq "$ZIP_PATH" -d /tmp/telegramz-fixes
+          SRC="/tmp/telegramz-fixes/Telegram-private-feature-local-hidden-chats/TMessagesProj/src/main/java"
+          DEST="TMessagesProj/src/main/java"
+          files=(
+            "org/telegram/messenger/LocalProfilePhotoSettings.java"
+            "org/telegram/ui/MainTabsActivity.java"
+            "org/telegram/ui/PhotoViewer.java"
+            "org/telegram/ui/PrivacyControlActivity.java"
+            "org/telegram/ui/ProfileActivity.java"
+            "org/telegram/ui/SettingsActivity.java"
+          )
+          for file in "${files[@]}"; do
+            test -s "$SRC/$file"
+            install -D "$SRC/$file" "$DEST/$file"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${files[@]/#/TMessagesProj/src/main/java/}"
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "ZIP files match the current branch; no source replacement commit is needed."
+          else
+            git commit -m "Apply programmer fixes for TelegramZ build 64"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -57,7 +90,7 @@ jobs:
 
           path = Path("TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java")
           source = path.read_text(encoding="utf-8")
-          source, id_count = re.subn(r"public static int APP_ID = \d+;", f"public static int APP_ID = {api_id};", source, count=1)
+          source, id_count = re.subn(r"public static int APP_ID = \\d+;", f"public static int APP_ID = {api_id};", source, count=1)
           source, hash_count = re.subn(r'public static String APP_HASH = "[^"]*";', f'public static String APP_HASH = "{api_hash}";', source, count=1)
           if id_count != 1 or hash_count != 1:
               raise SystemExit("Could not safely locate the Telegram API settings in BuildVars.java.")
