@@ -32,6 +32,7 @@ import android.widget.TextView;
 import androidx.collection.LongSparseArray;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
@@ -1342,7 +1343,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                             continue;
                         }
                         TLRPC.User user = messagesController.getUser(chatParticipant.user_id);
-                        if (user == null || UserObject.isUserSelf(user) || newResultsHashMap.indexOfKey(user.id) >= 0) {
+                        if (user == null || UserObject.isUserSelf(user) || newResultsHashMap.indexOfKey(user.id) >= 0 || HiddenChatsFilter.isKnownHidden(currentAccount, user.id)) {
                             continue;
                         }
                         if (usernameString.length() == 0) {
@@ -1377,7 +1378,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                     long id = dialogs.get(a).id;
                     if (id > 0) {
                         TLRPC.User user = messagesController.getUser(dialogs.get(a).id);
-                        if (user == null || UserObject.isUserSelf(user) || newResultsHashMap.indexOfKey(user.id) >= 0) {
+                        if (user == null || UserObject.isUserSelf(user) || newResultsHashMap.indexOfKey(user.id) >= 0 || HiddenChatsFilter.isKnownHidden(currentAccount, user.id)) {
                             continue;
                         }
                         if (usernameString.length() == 0) {
@@ -1506,6 +1507,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                                                 continue;
                                             }
                                             if (peerId >= 0) {
+                                                if (HiddenChatsFilter.isKnownHidden(currentAccount, peerId)) {
+                                                    continue;
+                                                }
                                                 TLRPC.User user = messagesController.getUser(peerId);
                                                 if (user == null) {
                                                     return;

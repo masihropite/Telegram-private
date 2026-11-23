@@ -2828,7 +2828,7 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                 searchRunnable = null;
 
                 final ArrayList<TLObject> participantsCopy = !ChatObject.isChannel(currentChat) && info != null ? new ArrayList<>(info.participants.participants) : null;
-                final ArrayList<TLRPC.TL_contact> contactsCopy = selectType == SELECT_TYPE_ADMIN ? new ArrayList<>(getContactsController().contacts) : null;
+                final ArrayList<TLRPC.TL_contact> contactsCopy = selectType == SELECT_TYPE_ADMIN ? getContactsController().getVisibleContacts() : null;
 
                 Runnable addContacts = null;
                 if (participantsCopy != null || contactsCopy != null) {

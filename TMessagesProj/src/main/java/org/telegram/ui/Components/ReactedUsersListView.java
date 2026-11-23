@@ -17,6 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
@@ -221,6 +222,9 @@ public class ReactedUsersListView extends FrameLayout {
         }
         List<TLRPC.TL_messagePeerReaction> nr = new ArrayList<>(users.size());
         for (ReactedHeaderView.UserSeen p : users) {
+            if (HiddenChatsFilter.isKnownHidden(currentAccount, p.dialogId)) {
+                continue;
+            }
             ArrayList<TLRPC.MessagePeerReaction> userReactions = peerReactionMap.get(p.dialogId);
             if (userReactions != null) {
                continue;
@@ -284,6 +288,9 @@ public class ReactedUsersListView extends FrameLayout {
 
                     HashSet<ReactionsLayoutInBubble.VisibleReaction> visibleCustomEmojiReactions = new HashSet<>();
                     for (int i = 0; i < res.reactions.size(); i++) {
+                        if (HiddenChatsFilter.isKnownHidden(currentAccount, MessageObject.getPeerId(res.reactions.get(i).peer_id))) {
+                            continue;
+                        }
                         userReactions.add(res.reactions.get(i));
                         long peerId = MessageObject.getPeerId(res.reactions.get(i).peer_id);
                         ArrayList<TLRPC.MessagePeerReaction> currentUserReactions = peerReactionMap.get(peerId);

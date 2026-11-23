@@ -1,0 +1,10 @@
+تغییرات این نسخه (روی سورس commit 211472a). به build.gradle، کلیدها، api_id/api_hash، مانیفست و google-services دست نخورده است.
+
+۱) اصلاح‌های قبلی که در این commit نبودند دوباره اعمال شد: PhotoViewer، MainTabsActivity، PrivacyControlActivity، ProfileActivity، SettingsActivity.
+۲) صفحه‌ی Profile Photos وقتی عکس خصوصی مخفی است: ظاهر Everybody، فقط ردیف Never Share With، بدون Update/Remove Public Photo، بدون پیام و بدون Save. چیزی به سرور نمی‌رود.
+۳) Privacy and Security: شمارنده‌های Phone Number و Last Seen به‌اندازه‌ی افراد مخفی کم می‌شود و جلوی Profile Photos «Everybody» نوشته می‌شود.
+۴) «Dump Canvas» از منوی تعویض اکانت و از منوی چت حذف شد.
+۵) مخاطب مخفی در این بخش‌ها دیده نمی‌شود: تب Contacts و چت جدید، انتخاب‌گر Never/Always Share With، افزودن عضو به گروه، انتخاب مخاطب برای هدیه و بوست، دعوت به تماس گروهی، پیوست مخاطب، حریم خصوصی استوری، فوروارد (لیست چت‌ها و share sheet با دکمه‌ی فلش و جستجوی آن)، منشن، بیننده‌های استوری، Seen by، لیست واکنش‌ها.
+۶) سرعت باز شدن: فیلتر چت‌های مخفی روی یک صف جدا اجرا می‌شود و ۳۰ چت اول لیست زودتر نمایش داده می‌شوند. رمزنگاری و کلیدها تغییری نکرده‌اند.
+
+کامپایل نشده: فقط سینتکس فایل‌ها بررسی شد. قبل از استفاده اول بیلد بگیرید.

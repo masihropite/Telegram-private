@@ -305,7 +305,7 @@ public class MultiContactsSelectorBottomSheet extends BottomSheetWithRecyclerLis
         headerView.setText(getTitle());
         updateActionButton(false);
 
-        contacts.addAll(ContactsController.getInstance(currentAccount).contacts);
+        contacts.addAll(ContactsController.getInstance(currentAccount).getVisibleContacts());
         contactsMap.putAll(ContactsController.getInstance(currentAccount).usersSectionsDict);
         contactsLetters.addAll(ContactsController.getInstance(currentAccount).sortedUsersSectionsArray);
         hints.addAll(MediaDataController.getInstance(currentAccount).hints);

@@ -75,6 +75,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
@@ -2927,12 +2928,20 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             }
             ArrayList<TLRPC.Dialog> archivedDialogs = new ArrayList<>();
             ArrayList<TLRPC.Dialog> allDialogs = MessagesController.getInstance(currentAccount).getAllDialogs();
+            ArrayList<Long> hiddenCheckIds = new ArrayList<>(allDialogs.size());
+            for (int a = 0; a < allDialogs.size(); a++) {
+                hiddenCheckIds.add(allDialogs.get(a).id);
+            }
+            HiddenChatsFilter.prepare(currentAccount, hiddenCheckIds, () -> fetchDialogs());
             for (int a = 0; a < allDialogs.size(); a++) {
                 TLRPC.Dialog dialog = allDialogs.get(a);
                 if (!(dialog instanceof TLRPC.TL_dialog)) {
                     continue;
                 }
                 if (dialog.id == selfUserId) {
+                    continue;
+                }
+                if (HiddenChatsFilter.isHidden(currentAccount, dialog.id)) {
                     continue;
                 }
                 if (!DialogObject.isEncryptedDialog(dialog.id)) {
@@ -3382,6 +3391,13 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                 if (searchId != lastSearchId) {
                     return;
                 }
+                for (int a = result.size() - 1; a >= 0; a--) {
+                    Object item = result.get(a);
+                    if (item instanceof DialogSearchResult && ((DialogSearchResult) item).dialog != null
+                            && HiddenChatsFilter.isKnownHidden(currentAccount, ((DialogSearchResult) item).dialog.id)) {
+                        result.remove(a);
+                    }
+                }
                 int oldItemCount = getItemCount();
                 internalDialogsIsSearching = false;
                 lastLocalSearchId = searchId;
@@ -3598,7 +3614,10 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                                 cell.setColors(Theme.key_voipgroup_nameText, Theme.key_voipgroup_inviteMembersBackground);
                             }
 
-                            TLRPC.TL_topPeer peer = MediaDataController.getInstance(currentAccount).hints.get(position);
+                            TLRPC.TL_topPeer peer = getVisiblePeer(position);
+                            if (peer == null) {
+                                return;
+                            }
                             TLRPC.Chat chat = null;
                             TLRPC.User user = null;
                             long did = 0;
@@ -3626,7 +3645,10 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                     });
                     horizontalListView.setOnItemClickListener((view1, position) -> {
                         HintDialogCell cell = (HintDialogCell) view1;
-                        TLRPC.TL_topPeer peer = MediaDataController.getInstance(currentAccount).hints.get(position);
+                        TLRPC.TL_topPeer peer = categoryAdapter.getVisiblePeer(position);
+                        if (peer == null) {
+                            return;
+                        }
                         TLRPC.Dialog dialog = new TLRPC.TL_dialog();
                         TLRPC.Chat chat = null;
                         TLRPC.User user = null;

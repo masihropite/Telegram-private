@@ -134,7 +134,7 @@ public class InviteMembersBottomSheet extends UsersAlertBase implements Notifica
         emptyView.showProgress(false, false);
         emptyView.setVisibility(View.GONE);
 
-        ArrayList<TLRPC.TL_contact> arrayList = ContactsController.getInstance(account).contacts;
+        ArrayList<TLRPC.TL_contact> arrayList = ContactsController.getInstance(account).getVisibleContacts();
         for (int a = 0; a < arrayList.size(); a++) {
             TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(arrayList.get(a).user_id);
             if (user == null || user.self || user.deleted) {

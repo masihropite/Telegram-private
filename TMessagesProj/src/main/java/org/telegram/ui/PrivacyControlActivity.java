@@ -616,8 +616,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
         }
         listView.setAdapter(listAdapter);
         listView.setOnItemClickListener((view, position) -> {
-            if (isPhotoPrivacyDisplayMasked() && (position == everybodyRow || position == myContactsRow || position == nobodyRow || position == alwaysShareRow || position == neverShareRow)) {
-                android.widget.Toast.makeText(getContext(), "تا زمانی که مخفی‌سازی عکس خصوصی روشن است، این بخش قابل تغییر نیست.", android.widget.Toast.LENGTH_SHORT).show();
+            if (isPhotoPrivacyDisplayMasked() && (position == everybodyRow || position == myContactsRow || position == nobodyRow || position == alwaysShareRow)) {
                 return;
             }
             if (position == currentPhotoForRestRow) {
@@ -742,6 +741,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                     createFromArray = visibleIdsIn(currentPlus);
                     hiddenKept = hiddenIdsIn(currentPlus);
                 }
+                if (isPhotoPrivacyDisplayMasked()) {
+                    createFromArray = new ArrayList<>();
+                }
                 Bundle args = new Bundle();
                 args.putBoolean(position == neverShareRow ? "isNeverShare" : "isAlwaysShare", true);
                 args.putInt("chatAddType", rulesType != PRIVACY_RULES_TYPE_LASTSEEN ? 1 : 0);
@@ -765,6 +767,9 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 }
                 fragment.select(createFromArray, position == alwaysShareRow && currentPlusPremium[currentType == TYPE_CONTACTS ? 0 : 1], allowMiniapps && currentPlusMiniapps[currentType]);
                 fragment.setDelegate((premium, miniapps, ids) -> {
+                    if (isPhotoPrivacyDisplayMasked()) {
+                        return;
+                    }
                     // Contacts whose chat is hidden are not shown in the picker; keep them in the real rule.
                     final ArrayList<Long> resultIds = new ArrayList<>(ids);
                     for (int h = 0; h < hiddenKept.size(); h++) {
@@ -1658,10 +1663,10 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
             }
         } else if (rulesType != PRIVACY_RULES_TYPE_VOICE_MESSAGES || getUserConfig().isPremium()) {
             shareSectionRow = rowCount++;
-            if (currentType == TYPE_NOBODY || currentType == TYPE_CONTACTS) {
+            if (getDisplayType() == TYPE_NOBODY || getDisplayType() == TYPE_CONTACTS) {
                 alwaysShareRow = rowCount++;
             }
-            if (currentType == TYPE_EVERYBODY || currentType == TYPE_CONTACTS) {
+            if (getDisplayType() == TYPE_EVERYBODY || getDisplayType() == TYPE_CONTACTS) {
                 neverShareRow = rowCount++;
             }
             shareDetailRow = rowCount++;
@@ -1671,7 +1676,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                 p2pDetailRow = rowCount++;
             }
 
-            if (rulesType == PRIVACY_RULES_TYPE_PHOTO && (currentMinus.size() > 0 || currentType == TYPE_CONTACTS || currentType == TYPE_NOBODY)) {
+            if (rulesType == PRIVACY_RULES_TYPE_PHOTO && !isPhotoPrivacyDisplayMasked() && (currentMinus.size() > 0 || currentType == TYPE_CONTACTS || currentType == TYPE_NOBODY)) {
                 photoForRestRow = rowCount++;
                 if (avatarForRest != null) {
                     currentPhotoForRestRow = rowCount++;

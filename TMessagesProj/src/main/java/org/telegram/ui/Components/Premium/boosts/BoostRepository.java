@@ -729,7 +729,7 @@ public class BoostRepository {
     public static void searchContactsLocally(String query, boolean allowBots, Utilities.Callback<List<TLRPC.User>> onDone) {
         final int currentAccount = UserConfig.selectedAccount;
         final ArrayList<TLRPC.User> users = new ArrayList<>();
-        final ArrayList<TLRPC.TL_contact> contacts = ContactsController.getInstance(currentAccount).contacts;
+        final ArrayList<TLRPC.TL_contact> contacts = ContactsController.getInstance(currentAccount).getVisibleContacts();
         if (contacts == null || contacts.isEmpty()) {
             ContactsController.getInstance(currentAccount).loadContacts(false, 0);
         }

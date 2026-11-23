@@ -2893,7 +2893,7 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
 
     private ArrayList<TLObject> getContacts() {
         final ArrayList<TLObject> chats = new ArrayList<>();
-        final ArrayList<TLRPC.TL_contact> contacts = ContactsController.getInstance(currentAccount).contacts;
+        final ArrayList<TLRPC.TL_contact> contacts = ContactsController.getInstance(currentAccount).getVisibleContacts();
         if (contacts == null || contacts.isEmpty()) {
             ContactsController.getInstance(currentAccount).loadContacts(false, 0);
         }

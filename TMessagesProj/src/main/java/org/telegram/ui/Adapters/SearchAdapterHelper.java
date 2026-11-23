@@ -18,6 +18,7 @@ import org.telegram.SQLite.SQLitePreparedStatement;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
@@ -223,13 +224,13 @@ public class SearchAdapterHelper {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
                                     if (chat != null) {
-                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || !filter(chat)) {
+                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || !filter(chat) || HiddenChatsFilter.isKnownHidden(currentAccount, -chat.id)) {
                                             continue;
                                         }
                                         globalSearch.add(chat);
                                         globalSearchMap.put(-chat.id, chat);
                                     } else if (user != null) {
-                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || !allowGlobalResults && b == 1 && !user.contact || !filter(user)) {
+                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || !allowGlobalResults && b == 1 && !user.contact || !filter(user) || HiddenChatsFilter.isKnownHidden(currentAccount, user.id)) {
                                             continue;
                                         }
                                         globalSearch.add(user);
@@ -250,13 +251,13 @@ public class SearchAdapterHelper {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
                                     if (chat != null) {
-                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || !filter(chat)) {
+                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || !filter(chat) || HiddenChatsFilter.isKnownHidden(currentAccount, -chat.id)) {
                                             continue;
                                         }
                                         localServerSearch.add(chat);
                                         globalSearchMap.put(-chat.id, chat);
                                     } else if (user != null) {
-                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || user.id == exceptDialogId || !filter(user)) {
+                                        if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || user.id == exceptDialogId || !filter(user) || HiddenChatsFilter.isKnownHidden(currentAccount, user.id)) {
                                             continue;
                                         }
                                         localServerSearch.add(user);
@@ -279,7 +280,7 @@ public class SearchAdapterHelper {
             phonesSearch.clear();
             phoneSearchMap.clear();
             String phone = PhoneFormat.stripExceptNumbers(query);
-            ArrayList<TLRPC.TL_contact> arrayList = ContactsController.getInstance(currentAccount).contacts;
+            ArrayList<TLRPC.TL_contact> arrayList = ContactsController.getInstance(currentAccount).getVisibleContacts();
             boolean hasFullMatch = false;
             for (int a = 0, N = arrayList.size(); a < N; a++) {
                 TLRPC.TL_contact contact = arrayList.get(a);

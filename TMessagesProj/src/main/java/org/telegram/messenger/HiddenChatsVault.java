@@ -75,6 +75,8 @@ public final class HiddenChatsVault {
             };
     private static final ConcurrentHashMap<Integer, HiddenChatsVault> ACTIVE_VAULTS = new ConcurrentHashMap<Integer, HiddenChatsVault>();
     private static final Object FILTER_CACHE_LOCK = new Object();
+    // Dedicated worker so the (Keystore based) filter checks never delay the shared globalQueue.
+    private static final DispatchQueue2 FILTER_QUEUE = new DispatchQueue2("hiddenChatsFilterQueue");
     private static final ConcurrentHashMap<String, Boolean> FILTER_CACHE = new ConcurrentHashMap<String, Boolean>();
     private static final ConcurrentHashMap<String, String> FILTER_TOKEN_CACHE = new ConcurrentHashMap<String, String>();
     private static final Set<String> FILTER_CACHE_PENDING = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
@@ -272,7 +274,7 @@ public final class HiddenChatsVault {
         }
         final AtomicInteger expectedGeneration = generationCounter;
         final int generation = expectedGeneration.get();
-        Utilities.globalQueue.postRunnable(() -> {
+        FILTER_QUEUE.postRunnable(() -> {
             try {
                 Set<String> tokens;
                 try {

@@ -612,7 +612,7 @@ public class UserSelectorBottomSheet extends BottomSheetWithRecyclerListView imp
 
     private void initContacts(boolean needUpdate) {
         if (contacts.isEmpty()) {
-            contacts.addAll(ContactsController.getInstance(currentAccount).contacts);
+            contacts.addAll(ContactsController.getInstance(currentAccount).getVisibleContacts());
             contactsMap.putAll(ContactsController.getInstance(currentAccount).usersSectionsDict);
             contactsLetters.addAll(ContactsController.getInstance(currentAccount).sortedUsersSectionsArray);
             if (needUpdate) {

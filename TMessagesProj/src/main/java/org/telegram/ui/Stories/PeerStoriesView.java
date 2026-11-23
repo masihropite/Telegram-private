@@ -68,6 +68,7 @@ import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 import org.telegram.ui.recyclerview.ChatListItemAnimator;
 
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
@@ -5947,6 +5948,9 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                     int avatarsCount = 0;
                     int k = 0;
                     for (int i = 0; i < storyItem.views.recent_viewers.size(); i++) {
+                        if (HiddenChatsFilter.isKnownHidden(currentAccount, storyItem.views.recent_viewers.get(i))) {
+                            continue;
+                        }
                         TLObject object = MessagesController.getInstance(currentAccount).getUserOrChat(storyItem.views.recent_viewers.get(i));
                         if (object != null) {
                             selfAvatarsView.setObject(avatarsCount, currentAccount, object);

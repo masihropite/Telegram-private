@@ -1704,10 +1704,23 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 }
                 if (!pendingDialogIds.isEmpty() && !hiddenFilterPreloadPending) {
                     hiddenFilterPreloadPending = true;
-                    hiddenVault.prepareDialogFilterCache(pendingDialogIds, () -> {
-                        hiddenFilterPreloadPending = false;
-                        notifyDataSetChanged();
-                    });
+                    // Resolve the top of the list first so the first screen appears quickly;
+                    // the remaining dialogs are resolved right after on the same worker.
+                    final int headSize = Math.min(30, pendingDialogIds.size());
+                    final ArrayList<Long> headIds = new ArrayList<>(pendingDialogIds.subList(0, headSize));
+                    final ArrayList<Long> tailIds = new ArrayList<>(pendingDialogIds.subList(headSize, pendingDialogIds.size()));
+                    if (tailIds.isEmpty()) {
+                        hiddenVault.prepareDialogFilterCache(headIds, () -> {
+                            hiddenFilterPreloadPending = false;
+                            notifyDataSetChanged();
+                        });
+                    } else {
+                        hiddenVault.prepareDialogFilterCache(headIds, () -> notifyDataSetChanged());
+                        hiddenVault.prepareDialogFilterCache(tailIds, () -> {
+                            hiddenFilterPreloadPending = false;
+                            notifyDataSetChanged();
+                        });
+                    }
                 }
             }
             array = visibleDialogs;
@@ -1721,7 +1734,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
         if (!hasHints && (parentFragment == null || !parentFragment.isHiddenChatsMode()) && dialogsType == 0 && folderId == 0 && messagesController.isDialogsEndReached(folderId) && !forceUpdatingContacts) {
             if (messagesController.getAllFoldersDialogsCount() <= 10 && ContactsController.getInstance(currentAccount).doneLoadingContacts && !ContactsController.getInstance(currentAccount).contacts.isEmpty()) {
-                onlineContacts = new ArrayList<>(ContactsController.getInstance(currentAccount).contacts);
+                onlineContacts = ContactsController.getInstance(currentAccount).getVisibleContacts();
                 long selfId = UserConfig.getInstance(currentAccount).clientUserId;
                 for (int a = 0, N = onlineContacts.size(); a < N; a++) {
                     long userId = onlineContacts.get(a).user_id;

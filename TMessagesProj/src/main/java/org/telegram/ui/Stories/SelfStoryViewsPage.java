@@ -30,6 +30,7 @@ import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ContactsController;
@@ -1116,8 +1117,18 @@ public class SelfStoryViewsPage extends FrameLayout implements Theme.Colorable, 
                                 items.add(new Item(USER_ITEM, model.reactions.get(i)));
                             }
                         } else {
+                            ArrayList<Long> viewerIds = new ArrayList<>(model.views.size());
                             for (int i = 0; i < model.views.size(); i++) {
-                                items.add(new Item(USER_ITEM, model.views.get(i)));
+                                viewerIds.add(model.views.get(i).user_id);
+                            }
+                            // People whose chat is hidden locally never show up as story viewers.
+                            HiddenChatsFilter.prepare(currentAccount, viewerIds, () -> updateRows());
+                            for (int i = 0; i < model.views.size(); i++) {
+                                TL_stories.StoryView storyView = model.views.get(i);
+                                if (storyView instanceof TL_stories.TL_storyView && HiddenChatsFilter.isHidden(currentAccount, storyView.user_id)) {
+                                    continue;
+                                }
+                                items.add(new Item(USER_ITEM, storyView));
                             }
                         }
                     }
@@ -1219,7 +1230,7 @@ public class SelfStoryViewsPage extends FrameLayout implements Theme.Colorable, 
                 if (storyItem.views != null && isDefault) {
                     for (int i = 0; i < storyItem.views.recent_viewers.size(); i++) {
                         long uid = storyItem.views.recent_viewers.get(i);
-                        if (MessagesController.getInstance(currentAccount).getUser(uid) == null) {
+                        if (MessagesController.getInstance(currentAccount).getUser(uid) == null || HiddenChatsFilter.isKnownHidden(currentAccount, uid)) {
                             continue;
                         }
                         TL_stories.TL_storyView storyView = new TL_stories.TL_storyView();

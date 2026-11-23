@@ -1005,7 +1005,7 @@ public class ChatAttachAlertContactsLayout extends ChatAttachAlert.AttachAlertLa
             AndroidUtilities.runOnUIThread(() -> {
                 final int currentAccount = UserConfig.selectedAccount;
                 final ArrayList<ContactsController.Contact> contactsCopy = new ArrayList<>(ContactsController.getInstance(currentAccount).contactsBook.values());
-                final ArrayList<TLRPC.TL_contact> contactsCopy2 = new ArrayList<>(ContactsController.getInstance(currentAccount).contacts);
+                final ArrayList<TLRPC.TL_contact> contactsCopy2 = ContactsController.getInstance(currentAccount).getVisibleContacts();
                 Utilities.searchQueue.postRunnable(() -> {
                     String search1 = query.trim().toLowerCase();
                     if (search1.length() == 0) {

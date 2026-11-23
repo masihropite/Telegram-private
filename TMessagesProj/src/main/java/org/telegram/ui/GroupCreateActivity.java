@@ -1192,7 +1192,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
             context = ctx;
 
             final HashSet<Long> addedContacts = new HashSet<>();
-            ArrayList<TLRPC.TL_contact> arrayList = getContactsController().contacts;
+            ArrayList<TLRPC.TL_contact> arrayList = getContactsController().getVisibleContacts();
             for (int a = 0; a < arrayList.size(); a++) {
                 TLRPC.User user = getMessagesController().getUser(arrayList.get(a).user_id);
                 if (user == null || user.self || user.deleted) {

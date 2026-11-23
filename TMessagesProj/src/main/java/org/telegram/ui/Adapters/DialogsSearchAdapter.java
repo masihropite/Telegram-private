@@ -297,7 +297,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                     .isDialogHiddenForFiltering(dialogId);
         }
 
-        private TLRPC.TL_topPeer getVisiblePeer(int position) {
+        public TLRPC.TL_topPeer getVisiblePeer(int position) {
             int visiblePosition = 0;
             ArrayList<TLRPC.TL_topPeer> hints = MediaDataController.getInstance(currentAccount).hints;
             for (int i = 0; i < hints.size(); i++) {

@@ -118,7 +118,7 @@ public class ContactsAdapter extends RecyclerListView.SectionsAdapter {
         sortType = value;
         if (sortType == SORT_TYPE_BY_TIME) {
             if (onlineContacts == null || force) {
-                onlineContacts = new ArrayList<>(ContactsController.getInstance(currentAccount).contacts);
+                onlineContacts = ContactsController.getInstance(currentAccount).getVisibleContacts();
                 long selfId = UserConfig.getInstance(currentAccount).clientUserId;
                 for (int a = 0, N = onlineContacts.size(); a < N; a++) {
                     if (onlineContacts.get(a).user_id == selfId) {

@@ -209,6 +209,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             observersGroup.removeAllObservers();
             observersGroup = null;
         }
+        if (accountObserversGroup != null) {
+            accountObserversGroup.removeAllObservers();
+            accountObserversGroup = null;
+        }
 
         observersGroup = NotificationCenter.getGlobalInstance()
             .createObserversGroup(this)
@@ -216,11 +220,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             .add(NotificationCenter.starBalanceUpdated)
             .add(NotificationCenter.newSuggestionsAvailable);
 
-        // Per-account notifications (local avatar visibility switches post on the account instance).
-        if (accountObserversGroup != null) {
-            accountObserversGroup.removeAllObservers();
-            accountObserversGroup = null;
-        }
         accountObserversGroup = NotificationCenter.getInstance(currentAccount)
             .createObserversGroup(this)
             .add(NotificationCenter.updateInterfaces)
@@ -538,14 +537,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.starBalanceUpdated) {
+        if (id == NotificationCenter.mainUserInfoChanged && account == currentAccount) {
             setInfo();
-            if (listView != null) {
-                listView.adapter.update(true);
-            }
-        } else if (id == NotificationCenter.updateInterfaces) {
-            setInfo();
-        } else if (id == NotificationCenter.mainUserInfoChanged) {
+        } else if (id == NotificationCenter.updateInterfaces && account == currentAccount) {
             setInfo();
         } else if (id == NotificationCenter.userInfoDidLoad) {
             if (account != currentAccount) {
@@ -555,6 +549,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             } else if (args != null && args.length > 0 && args[0] instanceof Long && (Long) args[0] == getUserConfig().getClientUserId()) {
                 setInfo();
             }
+        } else if (id == NotificationCenter.starBalanceUpdated) {
+            setInfo();
+            if (listView != null) {
+                listView.adapter.update(true);
+            }
+        } else if (id == NotificationCenter.updateInterfaces) {
+            setInfo();
         } else if (id == NotificationCenter.newSuggestionsAvailable) {
             if (listView != null) {
                 listView.adapter.update(true);

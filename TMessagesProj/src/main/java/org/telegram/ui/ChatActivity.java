@@ -4513,10 +4513,6 @@ public class ChatActivity extends BaseFragment implements
             }
         }
 
-        if (BuildConfig.DEBUG_PRIVATE_VERSION && headerItem != null) {
-            headerItem.lazilyAddSubItem(888, R.drawable.menu_download_round, "Dump Canvas");
-        }
-
         actionModeViews.clear();
         selectedMessagesCountTextView = null;
         checkActionBarMenu(false);

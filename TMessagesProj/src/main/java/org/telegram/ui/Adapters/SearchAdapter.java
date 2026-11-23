@@ -148,7 +148,7 @@ public class SearchAdapter extends RecyclerListView.SelectionAdapter {
                 searchAdapterHelper.queryServerSearch(query, true, allowChats, allowBots, allowSelf, false, channelId, allowPhoneNumbers, -1, 1);
             }
             final int currentAccount = UserConfig.selectedAccount;
-            final ArrayList<TLRPC.TL_contact> contactsCopy = new ArrayList<>(ContactsController.getInstance(currentAccount).contacts);
+            final ArrayList<TLRPC.TL_contact> contactsCopy = ContactsController.getInstance(currentAccount).getVisibleContacts();
             searchInProgress = true;
             searchReqId = searchPointer++;
             int searchReqIdFinal = searchReqId;

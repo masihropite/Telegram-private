@@ -1924,6 +1924,38 @@ public class ContactsController extends BaseController {
         phoneBookContacts = sortedPhoneBookContacts;
     }
 
+    private boolean hiddenContactsRefreshScheduled;
+
+    /** Resolves unknown contacts in the background and rebuilds the visible lists once they are known. */
+    private void scheduleHiddenContactsRefresh(ArrayList<TLRPC.TL_contact> source) {
+        ArrayList<Long> ids = new ArrayList<>(source.size());
+        for (int a = 0, N = source.size(); a < N; a++) {
+            ids.add(source.get(a).user_id);
+        }
+        if (hiddenContactsRefreshScheduled) {
+            return;
+        }
+        hiddenContactsRefreshScheduled = HiddenChatsFilter.prepare(currentAccount, ids, () -> {
+            hiddenContactsRefreshScheduled = false;
+            buildContactsSectionsArrays(false);
+            getNotificationCenter().postNotificationName(NotificationCenter.contactsDidLoad);
+        });
+    }
+
+    /** Contacts without the people whose chat is hidden locally (copy; safe to modify). */
+    public ArrayList<TLRPC.TL_contact> getVisibleContacts() {
+        ArrayList<TLRPC.TL_contact> all = new ArrayList<>(contacts);
+        scheduleHiddenContactsRefresh(all);
+        ArrayList<TLRPC.TL_contact> result = new ArrayList<>(all.size());
+        for (int a = 0, N = all.size(); a < N; a++) {
+            TLRPC.TL_contact contact = all.get(a);
+            if (!HiddenChatsFilter.isHidden(currentAccount, contact.user_id)) {
+                result.add(contact);
+            }
+        }
+        return result;
+    }
+
     private void buildContactsSectionsArrays(boolean sort) {
         final Collator collator = getLocaleCollator();
         if (sort) {
@@ -1939,8 +1971,12 @@ public class ContactsController extends BaseController {
         final HashMap<String, ArrayList<TLRPC.TL_contact>> sectionsDict = new HashMap<>();
         final ArrayList<String> sortedSectionsArray = new ArrayList<>();
 
+        scheduleHiddenContactsRefresh(contacts);
         for (int a = 0; a < contacts.size(); a++) {
             TLRPC.TL_contact value = contacts.get(a);
+            if (HiddenChatsFilter.isHidden(currentAccount, value.user_id)) {
+                continue;
+            }
             TLRPC.User user = getMessagesController().getUser(value.user_id);
             if (user == null) {
                 continue;

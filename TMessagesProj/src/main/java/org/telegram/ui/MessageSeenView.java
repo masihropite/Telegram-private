@@ -1,5 +1,6 @@
 package org.telegram.ui;
 
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.FileLog;
 import android.content.Context;
 import android.graphics.PorterDuff;
@@ -158,6 +159,9 @@ public class MessageSeenView extends FrameLayout implements Theme.Colorable {
                 if (unknownUsers.isEmpty()) {
                     for (int i = 0; i < allPeers.size(); i++) {
                         Pair<Long, Integer> pair = allPeers.get(i);
+                        if (HiddenChatsFilter.isKnownHidden(currentAccount, pair.first)) {
+                            continue;
+                        }
                         peerIds.add(pair.first);
                         dates.add(pair.second);
                         users.add(usersLocal.get(pair.first));
@@ -180,6 +184,9 @@ public class MessageSeenView extends FrameLayout implements Theme.Colorable {
                                 }
                                 for (int i = 0; i < allPeers.size(); i++) {
                                     Pair<Long, Integer> pair = allPeers.get(i);
+                                    if (HiddenChatsFilter.isKnownHidden(currentAccount, pair.first)) {
+                                        continue;
+                                    }
                                     peerIds.add(pair.first);
                                     dates.add(pair.second);
                                     this.users.add(usersLocal.get(pair.first));
@@ -200,6 +207,9 @@ public class MessageSeenView extends FrameLayout implements Theme.Colorable {
                                 }
                                 for (int i = 0; i < allPeers.size(); i++) {
                                     Pair<Long, Integer> pair = allPeers.get(i);
+                                    if (HiddenChatsFilter.isKnownHidden(currentAccount, pair.first)) {
+                                        continue;
+                                    }
                                     peerIds.add(pair.first);
                                     dates.add(pair.second);
                                     this.users.add(usersLocal.get(pair.first));

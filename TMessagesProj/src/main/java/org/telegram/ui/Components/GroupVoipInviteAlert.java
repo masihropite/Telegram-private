@@ -191,7 +191,7 @@ public class GroupVoipInviteAlert extends UsersAlertBase {
         if (!showContacts) {
             return;
         }
-        contacts.addAll(ContactsController.getInstance(currentAccount).contacts);
+        contacts.addAll(ContactsController.getInstance(currentAccount).getVisibleContacts());
         long selfId = UserConfig.getInstance(currentAccount).clientUserId;
         for (int a = 0, N = contacts.size(); a < N; a++) {
             TLObject object = contacts.get(a);

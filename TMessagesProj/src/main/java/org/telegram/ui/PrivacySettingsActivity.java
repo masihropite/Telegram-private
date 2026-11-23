@@ -38,6 +38,9 @@ import androidx.annotation.Keep;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.LocalProfilePhotoSettings;
+import org.telegram.messenger.HiddenChatsFilter;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
@@ -878,6 +881,10 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
     }
 
     public static String formatRulesString(AccountInstance accountInstance, int rulesType) {
+        if (rulesType == ContactsController.PRIVACY_RULES_TYPE_PHOTO
+                && LocalProfilePhotoSettings.isPrivateHidden(ApplicationLoader.applicationContext, accountInstance.getCurrentAccount())) {
+            return getString(R.string.LastSeenEverybody);
+        }
         final ArrayList<TLRPC.PrivacyRule> privacyRules = accountInstance.getContactsController().getPrivacyRules(rulesType);
         final TLRPC.GlobalPrivacySettings global = accountInstance.getContactsController().getGlobalPrivacySettings();
         if (privacyRules == null || privacyRules.size() == 0) {
@@ -914,10 +921,18 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                 }
             } else if (rule instanceof TLRPC.TL_privacyValueAllowUsers) {
                 TLRPC.TL_privacyValueAllowUsers privacyValueAllowUsers = (TLRPC.TL_privacyValueAllowUsers) rule;
-                plus += privacyValueAllowUsers.users.size();
+                for (int b = 0, N = privacyValueAllowUsers.users.size(); b < N; b++) {
+                    if (!HiddenChatsFilter.isKnownHidden(accountInstance.getCurrentAccount(), privacyValueAllowUsers.users.get(b))) {
+                        plus++;
+                    }
+                }
             } else if (rule instanceof TLRPC.TL_privacyValueDisallowUsers) {
                 TLRPC.TL_privacyValueDisallowUsers privacyValueDisallowUsers = (TLRPC.TL_privacyValueDisallowUsers) rule;
-                minus += privacyValueDisallowUsers.users.size();
+                for (int b = 0, N = privacyValueDisallowUsers.users.size(); b < N; b++) {
+                    if (!HiddenChatsFilter.isKnownHidden(accountInstance.getCurrentAccount(), privacyValueDisallowUsers.users.get(b))) {
+                        minus++;
+                    }
+                }
             } else if (rule instanceof TLRPC.TL_privacyValueAllowPremium) {
                 premium = true;
             } else if (rule instanceof TLRPC.TL_privacyValueAllowBots) {
