@@ -20,35 +20,24 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply programmer ZIP fixes and commit them
+      - name: Apply round-two programmer ZIP files and commit them
         run: |
           set -euo pipefail
-          ZIP_PATH="telegramz-6-files.zip"
+          ZIP_PATH="telegramz-round2-changed-files.zip"
           test -s "$ZIP_PATH"
-          mkdir -p /tmp/telegramz-fixes
-          unzip -oq "$ZIP_PATH" -d /tmp/telegramz-fixes
-          SRC="/tmp/telegramz-fixes/Telegram-private-feature-local-hidden-chats/TMessagesProj/src/main/java"
-          DEST="TMessagesProj/src/main/java"
-          files=(
-            "org/telegram/messenger/LocalProfilePhotoSettings.java"
-            "org/telegram/ui/MainTabsActivity.java"
-            "org/telegram/ui/PhotoViewer.java"
-            "org/telegram/ui/PrivacyControlActivity.java"
-            "org/telegram/ui/ProfileActivity.java"
-            "org/telegram/ui/SettingsActivity.java"
-          )
-          for file in "${files[@]}"; do
-            test -s "$SRC/$file"
-            install -D "$SRC/$file" "$DEST/$file"
-          done
+          mkdir -p /tmp/telegramz-round2
+          unzip -oq "$ZIP_PATH" -d /tmp/telegramz-round2
+          test -d /tmp/telegramz-round2/TMessagesProj/src/main/java
+          cp -a /tmp/telegramz-round2/TMessagesProj/. TMessagesProj/
+          install -D /tmp/telegramz-round2/CHANGES-fa.txt CHANGES-fa.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${files[@]/#/TMessagesProj/src/main/java/}"
+          git add TMessagesProj/src/main/java CHANGES-fa.txt
           git diff --cached --check
           if git diff --cached --quiet; then
-            echo "ZIP files match the current branch; no source replacement commit is needed."
+            echo "Round-two Java files already match this branch."
           else
-            git commit -m "Apply programmer fixes for TelegramZ build 64"
+            git commit -m "Apply round-two TelegramZ programmer changes"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
